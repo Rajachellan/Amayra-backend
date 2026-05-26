@@ -10,6 +10,9 @@ import { Lookbook } from "../models/Lookbook.js";
 import { Banner } from "../models/Banner.js";
 import { Product } from "../models/Product.js";
 import { HomepageSection } from "../models/HomepageSection.js";
+import { Customer } from "../models/Customer.js";
+import { Order } from "../models/Order.js";
+import { Payment } from "../models/Payment.js";
 
 const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/amayra";
 
@@ -17,6 +20,9 @@ async function run() {
   await connectDb(mongoUri);
   await Promise.all([
     Admin.deleteMany({}),
+    Customer.deleteMany({}),
+    Payment.deleteMany({}),
+    Order.deleteMany({}),
     Category.deleteMany({}),
     Collection.deleteMany({}),
     Occasion.deleteMany({}),
@@ -66,6 +72,8 @@ async function run() {
   const earrings = subs.find((c) => c.slug === "earrings")!;
   const necklaces = subs.find((c) => c.slug === "necklaces")!;
   const bangles = subs.find((c) => c.slug === "bangles")!;
+  const rings = subs.find((c) => c.slug === "rings")!;
+  const bridalCat = subs.find((c) => c.slug === "bridal")!;
 
   const colHeritage = await Collection.create({
     name: "Heritage Series",
@@ -155,8 +163,8 @@ async function run() {
     shortDescription: "Brilliant-cut solitaire in 18k gold.",
     description:
       "A stunning 18k yellow gold ring featuring a brilliant-cut solitaire diamond. Perfect for engagements and special moments.",
-    category: subs.find((c) => c.slug === "rings")!._id,
-    subCategory: subs.find((c) => c.slug === "rings")!._id,
+    category: rings._id,
+    subCategory: rings._id,
     collections: [colModern._id],
     occasions: wedding ? [wedding._id] : [],
     lookbooks: [lb._id],
@@ -259,6 +267,250 @@ async function run() {
     trending: true,
     status: "published",
   });
+
+  await Product.insertMany([
+    {
+      name: "Kundan Statement Rani Haar",
+      slug: "kundan-statement-rani-haar",
+      shortDescription: "Opulent Kundan bridal necklace.",
+      description:
+        "An opulent multi-string Kundan and emerald necklace, perfect for a royal bridal ensemble.",
+      category: necklaces._id,
+      subCategory: necklaces._id,
+      collections: [colHeritage._id],
+      images: [
+        "https://images.unsplash.com/photo-1615655406736-b37c4fabf923?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 420000,
+      salePrice: 350000,
+      stock: 2,
+      material: "22k Gold & Kundan",
+      color: "Gold",
+      weight: "120g",
+      status: "published",
+    },
+    {
+      name: "Victorian Sapphire Earrings",
+      slug: "victorian-sapphire-earrings",
+      shortDescription: "Sapphire drops in Victorian style.",
+      description: "Deep blue sapphire drops surrounded by micro-diamonds in a Victorian style.",
+      category: earrings._id,
+      subCategory: earrings._id,
+      collections: [colHeritage._id],
+      images: [
+        "https://images.unsplash.com/photo-1630019017578-831633534d02?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 85000,
+      salePrice: 68000,
+      stock: 12,
+      material: "18k Rose Gold",
+      color: "Blue",
+      weight: "5.8g",
+      status: "published",
+    },
+    {
+      name: "Heritage South Indian Hasli",
+      slug: "heritage-south-indian-hasli",
+      shortDescription: "Traditional gold Hasli choker.",
+      description: "Traditional stiff choker necklace with rubies and hand-etched gold work.",
+      category: necklaces._id,
+      subCategory: necklaces._id,
+      collections: [colHeritage._id],
+      images: [
+        "https://images.unsplash.com/photo-1626784215021-2e39ccf971cd?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 185000,
+      stock: 4,
+      material: "22k Gold",
+      color: "Gold",
+      weight: "55g",
+      status: "published",
+    },
+    {
+      name: "Antique Peacock Brooch",
+      slug: "antique-peacock-brooch",
+      shortDescription: "Gold peacock motif brooch.",
+      description:
+        "A masterfully crafted gold brooch featuring a peacock motif with enamel work and pearls.",
+      category: necklaces._id,
+      subCategory: necklaces._id,
+      collections: [colModern._id],
+      images: [
+        "https://images.unsplash.com/photo-1617038220319-276d3cfab638?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 42000,
+      stock: 10,
+      material: "18k Gold",
+      color: "Multi",
+      weight: "12g",
+      status: "published",
+    },
+    {
+      name: "Ruby Temple Jhumkas",
+      slug: "ruby-temple-jhumkas",
+      shortDescription: "Temple ruby jhumkas.",
+      description: "Traditional temple earrings with rubies and gold bells.",
+      category: earrings._id,
+      subCategory: earrings._id,
+      collections: [colHeritage._id],
+      images: [
+        "https://images.unsplash.com/photo-1598560912005-597659b7524b?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 55000,
+      stock: 15,
+      material: "22k Gold",
+      color: "Ruby",
+      weight: "14g",
+      status: "published",
+    },
+    {
+      name: "Minimalist Gold Leaf Brooch",
+      slug: "minimalist-gold-leaf-brooch",
+      shortDescription: "Modern matte gold leaf brooch.",
+      description: "A subtle leaf design in matte finish gold for formal occasions.",
+      category: earrings._id,
+      subCategory: earrings._id,
+      collections: [colModern._id],
+      images: [
+        "https://images.unsplash.com/photo-1601121141461-9d6647bca1ed?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 18000,
+      stock: 25,
+      material: "14k Gold",
+      color: "Gold",
+      weight: "4g",
+      status: "published",
+    },
+    {
+      name: "Bridal Emerald Mathapatti",
+      slug: "bridal-emerald-mathapatti",
+      shortDescription: "Emerald bridal headpiece.",
+      description: "A stunning bridal headpiece with gold work and teardrop emeralds.",
+      category: bridalCat._id,
+      subCategory: bridalCat._id,
+      collections: [colHeritage._id],
+      images: [
+        "https://images.unsplash.com/photo-1620914107106-25ed75f10f88?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 125000,
+      stock: 5,
+      material: "22k Gold",
+      color: "Emerald",
+      weight: "45g",
+      status: "published",
+    },
+    {
+      name: "American Diamond Hoop Earrings",
+      slug: "american-diamond-hoop-earrings",
+      shortDescription: "CZ hoops in sterling silver.",
+      description: "High-quality cubic zirconia set in sterling silver hoops.",
+      category: earrings._id,
+      subCategory: earrings._id,
+      collections: [colModern._id],
+      images: [
+        "https://images.unsplash.com/photo-1617038260897-41a1f14a8ca0?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 15000,
+      salePrice: 12000,
+      stock: 50,
+      material: "925 Silver",
+      color: "Silver",
+      weight: "3.5g",
+      status: "published",
+    },
+    {
+      name: "Heritage Kundan Necklace Set",
+      slug: "heritage-kundan-necklace-set",
+      shortDescription: "Complete Kundan bridal set.",
+      description: "Heavy Kundan necklace set with matching earrings and maang tikka.",
+      category: necklaces._id,
+      subCategory: necklaces._id,
+      collections: [colHeritage._id],
+      images: [
+        "https://images.unsplash.com/photo-1615655406736-b37c4fabf923?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 245000,
+      stock: 3,
+      material: "24k Gold Foil",
+      color: "Green",
+      weight: "180g",
+      status: "published",
+    },
+    {
+      name: "Victorian Sapphire Choker",
+      slug: "victorian-sapphire-choker",
+      shortDescription: "Sapphire Victorian choker.",
+      description: "Victorian-style choker with sapphires and rose cut diamonds.",
+      category: necklaces._id,
+      subCategory: necklaces._id,
+      collections: [colHeritage._id],
+      images: [
+        "https://images.unsplash.com/photo-1626784215021-2e39ccf971cd?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 125000,
+      salePrice: 95000,
+      stock: 7,
+      material: "18k Rose Gold",
+      color: "Blue",
+      weight: "28g",
+      status: "published",
+    },
+    {
+      name: "South Indian Temple Belt (Oddiyanam)",
+      slug: "south-indian-temple-belt-oddiyanam",
+      shortDescription: "Bridal gold waist belt.",
+      description:
+        "Royal South Indian bridal waist belt with Lakshmi motifs and handcrafted finish.",
+      category: bridalCat._id,
+      subCategory: bridalCat._id,
+      collections: [colHeritage._id],
+      images: [
+        "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 450000,
+      stock: 1,
+      material: "22k Gold",
+      color: "Gold",
+      weight: "250g",
+      status: "published",
+    },
+    {
+      name: "Daily Wear Gold Studs",
+      slug: "daily-wear-gold-studs",
+      shortDescription: "Lightweight 18k gold studs.",
+      description: "Simple elegant gold studs for daily wear.",
+      category: earrings._id,
+      subCategory: earrings._id,
+      collections: [colModern._id],
+      images: [
+        "https://images.unsplash.com/photo-1635767798638-3e2827e84a2b?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 15000,
+      stock: 100,
+      material: "18k Gold",
+      color: "Gold",
+      weight: "2.1g",
+      status: "published",
+    },
+    {
+      name: "Victorian Diamond Bracelet",
+      slug: "victorian-diamond-bracelet",
+      shortDescription: "Vintage-style diamond bracelet.",
+      description: "Vintage-inspired bracelet with black rhodium finish and grey diamonds.",
+      category: bangles._id,
+      subCategory: bangles._id,
+      collections: [colModern._id],
+      images: [
+        "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=1200&auto=format&fit=crop",
+      ],
+      price: 75000,
+      stock: 15,
+      material: "Sterling Silver",
+      color: "Silver",
+      weight: "15g",
+      status: "published",
+    },
+  ]);
 
   await Lookbook.findByIdAndUpdate(lb._id, { products: [p1._id, p2._id, p3._id] });
 

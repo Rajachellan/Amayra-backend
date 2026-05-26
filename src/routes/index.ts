@@ -1,6 +1,6 @@
 import { Router } from "express";
 import multer from "multer";
-import { authenticateAdmin } from "../middleware/auth.js";
+import { authenticateAdmin, authenticateCustomer } from "../middleware/auth.js";
 import * as categoryController from "../controllers/categoryController.js";
 import * as productController from "../controllers/productController.js";
 import * as collectionController from "../controllers/collectionController.js";
@@ -12,6 +12,11 @@ import * as authController from "../controllers/authController.js";
 import * as blogController from "../controllers/blogController.js";
 import * as leadController from "../controllers/leadController.js";
 import * as dashboardController from "../controllers/dashboardController.js";
+import * as customerAuthController from "../controllers/customerAuthController.js";
+import * as orderCustomerController from "../controllers/orderCustomerController.js";
+import * as orderAdminController from "../controllers/orderAdminController.js";
+import * as shiprocketAdminController from "../controllers/shiprocketAdminController.js";
+import * as paymentAdminController from "../controllers/paymentAdminController.js";
 import { storeUploadedFile } from "../services/storageUpload.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -24,6 +29,17 @@ export const router = Router();
 
 router.post("/auth/login", authController.login);
 
+router.post("/auth/customer/register", customerAuthController.registerCustomer);
+router.post("/auth/customer/login", customerAuthController.loginCustomer);
+router.post("/auth/customer/oauth/google", customerAuthController.googleOAuthCustomer);
+router.get("/auth/customer/me", authenticateCustomer, customerAuthController.meCustomer);
+router.patch("/auth/customer/me", authenticateCustomer, customerAuthController.updateCustomerProfile);
+
+router.post("/orders/checkout", authenticateCustomer, orderCustomerController.postCheckout);
+router.post("/payments/verify", authenticateCustomer, orderCustomerController.postVerifyPayment);
+router.get("/orders/me", authenticateCustomer, orderCustomerController.listMyOrders);
+router.get("/orders/:id", authenticateCustomer, orderCustomerController.getMyOrder);
+
 router.get("/admin/dashboard", authenticateAdmin, dashboardController.getDashboardStats);
 
 router.get("/admin/categories", authenticateAdmin, categoryController.listCategoriesAdmin);
@@ -33,6 +49,23 @@ router.get("/admin/products/:id", authenticateAdmin, productController.getProduc
 router.get("/admin/collections", authenticateAdmin, collectionController.listCollectionsAdmin);
 router.get("/admin/lookbooks", authenticateAdmin, lookbookController.listLookbooksAdmin);
 router.get("/admin/occasions", authenticateAdmin, occasionController.listOccasionsAdmin);
+
+router.get("/admin/orders", authenticateAdmin, orderAdminController.listOrdersAdmin);
+router.get("/admin/shiprocket/pickups", authenticateAdmin, shiprocketAdminController.getShiprocketPickups);
+router.get(
+  "/admin/orders/:id/shiprocket/serviceability",
+  authenticateAdmin,
+  shiprocketAdminController.getOrderShiprocketServiceability
+);
+router.post(
+  "/admin/orders/:id/shiprocket/shipment",
+  authenticateAdmin,
+  shiprocketAdminController.postOrderShiprocketShipment
+);
+router.get("/admin/orders/:id", authenticateAdmin, orderAdminController.getOrderAdmin);
+router.put("/admin/orders/:id/status", authenticateAdmin, orderAdminController.putOrderAdminStatus);
+router.get("/admin/payments", authenticateAdmin, paymentAdminController.listPaymentsAdmin);
+router.get("/admin/payments/:id", authenticateAdmin, paymentAdminController.getPaymentAdmin);
 
 router.get("/banners", bannerController.listBanners);
 router.post("/banners", authenticateAdmin, bannerController.createBanner);
