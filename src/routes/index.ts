@@ -20,9 +20,12 @@ import * as paymentAdminController from "../controllers/paymentAdminController.j
 import { storeUploadedFile } from "../services/storageUpload.js";
 import { AppError } from "../utils/AppError.js";
 
+// Multer stores the entire upload in memory (memoryStorage), so keep this reasonable.
+// If images are larger than this, Multer will throw `LIMIT_FILE_SIZE` and the upload
+// will fail (which results in products having no `images[0]` -> storefront falls back).
 const memoryUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 8 * 1024 * 1024 },
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
 });
 
 export const router = Router();

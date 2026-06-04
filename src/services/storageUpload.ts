@@ -76,24 +76,44 @@ async function uploadToR2(
   const publicBase = process.env.R2_PUBLIC_BASE_URL!.replace(/\/$/, "");
   const key = objectKey(originalname, folder);
 
-  const client = new S3Client({
-    region: "auto",
-    endpoint,
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID!,
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
-    },
-    forcePathStyle: true,
-  });
+  const put = async (ep: string) => {
+    const client = new S3Client({
+      region: "auto",
+      endpoint: ep,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
+      },
+      forcePathStyle: true,
+    });
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType || "application/octet-stream",
+      })
+    );
+  };
 
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: buffer,
-      ContentType: contentType || "application/octet-stream",
-    })
-  );
+  try {
+    await put(endpoint);
+  } catch (e) {
+    // If user didn't set an explicit endpoint, retry against jurisdictional endpoints.
+    // This commonly fixes TLS handshake failures for EU / FedRAMP accounts.
+    const explicit = process.env.R2_S3_ENDPOINT?.trim();
+    const accountId =
+      process.env.R2_ACCOUNT_ID?.trim() ||
+      process.env.CLOUDFLARE_ACCOUNT_ID?.trim() ||
+      process.env.CF_ACCOUNT_ID?.trim();
+    const msg = e instanceof Error ? e.message : String(e);
+    const looksLikeTls = /EPROTO|handshake failure|ssl3_read_bytes/i.test(msg);
+    if (!explicit && accountId && looksLikeTls) {
+      await put(`https://${accountId}.eu.r2.cloudflarestorage.com`);
+    } else {
+      throw e;
+    }
+  }
 
   return `${publicBase}/${key}`;
 }
