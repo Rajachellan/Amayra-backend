@@ -278,6 +278,11 @@ export async function postOrderShiprocketShipment(req: Request, res: Response, n
     });
     await fresh.save();
 
+    if (fresh.status === "paid" || fresh.status === "processing") {
+      fresh.status = "shipped";
+      await fresh.save();
+    }
+
     const updated = await Order.findById(fresh._id)
       .populate("customer", "name email phone")
       .populate("payment", "status amount razorpayOrderId razorpayPaymentId method");

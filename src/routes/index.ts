@@ -7,6 +7,9 @@ import * as collectionController from "../controllers/collectionController.js";
 import * as lookbookController from "../controllers/lookbookController.js";
 import * as occasionController from "../controllers/occasionController.js";
 import * as bannerController from "../controllers/bannerController.js";
+import * as promotionalBannerController from "../controllers/promotionalBannerController.js";
+import * as announcementController from "../controllers/announcementController.js";
+import * as homepageSettingsController from "../controllers/homepageSettingsController.js";
 import * as homepageSectionController from "../controllers/homepageSectionController.js";
 import * as authController from "../controllers/authController.js";
 import * as blogController from "../controllers/blogController.js";
@@ -41,6 +44,7 @@ router.patch("/auth/customer/me", authenticateCustomer, customerAuthController.u
 router.post("/orders/checkout", authenticateCustomer, orderCustomerController.postCheckout);
 router.post("/payments/verify", authenticateCustomer, orderCustomerController.postVerifyPayment);
 router.get("/orders/me", authenticateCustomer, orderCustomerController.listMyOrders);
+router.get("/orders/:id/tracking", authenticateCustomer, orderCustomerController.getMyOrderTracking);
 router.get("/orders/:id", authenticateCustomer, orderCustomerController.getMyOrder);
 
 router.get("/admin/dashboard", authenticateAdmin, dashboardController.getDashboardStats);
@@ -71,9 +75,29 @@ router.get("/admin/payments", authenticateAdmin, paymentAdminController.listPaym
 router.get("/admin/payments/:id", authenticateAdmin, paymentAdminController.getPaymentAdmin);
 
 router.get("/banners", bannerController.listBanners);
+router.get("/admin/banners", authenticateAdmin, bannerController.listBannersAdmin);
 router.post("/banners", authenticateAdmin, bannerController.createBanner);
+router.put("/banners/reorder", authenticateAdmin, bannerController.reorderBanners);
 router.put("/banners/:id", authenticateAdmin, bannerController.updateBanner);
 router.delete("/banners/:id", authenticateAdmin, bannerController.deleteBanner);
+
+router.get("/promotional-banners", promotionalBannerController.listPromotionalBanners);
+router.get("/admin/promotional-banners", authenticateAdmin, promotionalBannerController.listPromotionalBannersAdmin);
+router.post("/promotional-banners", authenticateAdmin, promotionalBannerController.createPromotionalBanner);
+router.put("/promotional-banners/reorder", authenticateAdmin, promotionalBannerController.reorderPromotionalBanners);
+router.put("/promotional-banners/:id", authenticateAdmin, promotionalBannerController.updatePromotionalBanner);
+router.delete("/promotional-banners/:id", authenticateAdmin, promotionalBannerController.deletePromotionalBanner);
+
+router.get("/announcements", announcementController.listAnnouncements);
+router.get("/admin/announcements", authenticateAdmin, announcementController.listAnnouncementsAdmin);
+router.post("/announcements", authenticateAdmin, announcementController.createAnnouncement);
+router.put("/announcements/reorder", authenticateAdmin, announcementController.reorderAnnouncements);
+router.put("/announcements/:id", authenticateAdmin, announcementController.updateAnnouncement);
+router.delete("/announcements/:id", authenticateAdmin, announcementController.deleteAnnouncement);
+
+router.get("/homepage-settings", homepageSettingsController.getHomepageSettingsPublic);
+router.get("/admin/homepage-settings", authenticateAdmin, homepageSettingsController.getHomepageSettingsAdmin);
+router.put("/admin/homepage-settings", authenticateAdmin, homepageSettingsController.updateHomepageSettingsAdmin);
 
 router.get("/categories", categoryController.listCategories);
 router.get("/categories/tree", categoryController.treeCategories);
@@ -107,6 +131,7 @@ router.delete("/occasions/:id", authenticateAdmin, occasionController.deleteOcca
 router.get("/homepage-sections", homepageSectionController.publicHomepageSections);
 router.get("/homepage-sections/admin", authenticateAdmin, homepageSectionController.listHomepageSectionsAdmin);
 router.post("/homepage-sections", authenticateAdmin, homepageSectionController.createHomepageSection);
+router.put("/homepage-sections/reorder", authenticateAdmin, homepageSectionController.reorderHomepageSections);
 router.put("/homepage-sections/:id", authenticateAdmin, homepageSectionController.updateHomepageSection);
 router.delete("/homepage-sections/:id", authenticateAdmin, homepageSectionController.deleteHomepageSection);
 
@@ -131,13 +156,14 @@ router.post("/upload", authenticateAdmin, memoryUpload.single("file"), async (re
     }
     const q = req.query.folder;
     const folder =
-      typeof q === "string" && ["products", "categories", "banners", "blogs", "misc"].includes(q)
-        ? (q as "products" | "categories" | "banners" | "blogs" | "misc")
+      typeof q === "string" &&
+      ["products", "categories", "banners", "blogs", "promotional", "misc"].includes(q)
+        ? (q as "products" | "categories" | "banners" | "blogs" | "promotional" | "misc")
         : "misc";
-    const url = await storeUploadedFile(req.file.buffer, req.file.originalname, req.file.mimetype, {
+    const result = await storeUploadedFile(req.file.buffer, req.file.originalname, req.file.mimetype, {
       folder,
     });
-    res.json({ url });
+    res.json({ url: result.url, key: result.key, imageUrl: result.url, imageKey: result.key });
   } catch (e) {
     next(e instanceof Error ? new AppError(500, e.message) : e);
   }

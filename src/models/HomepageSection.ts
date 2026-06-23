@@ -2,7 +2,19 @@ import mongoose, { Schema, type InferSchemaType } from "mongoose";
 
 const homepageSectionSchema = new Schema(
   {
-    sectionType: { type: String, required: true, index: true },
+    sectionType: {
+      type: String,
+      required: true,
+      enum: [
+        "featured-categories",
+        "featured-collections",
+        "featured-products",
+        "featured-occasions",
+        "lookbooks",
+        "atelier-products",
+      ],
+      index: true,
+    },
     title: { type: String, required: true },
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },

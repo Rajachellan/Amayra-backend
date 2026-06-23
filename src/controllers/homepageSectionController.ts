@@ -116,3 +116,14 @@ export async function deleteHomepageSection(
     next(e);
   }
 }
+
+export async function reorderHomepageSections(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? (req.body.ids as string[]) : [];
+    if (!ids.length) throw new AppError(400, "ids array required");
+    await Promise.all(ids.map((id, index) => HomepageSection.updateOne({ _id: id }, { order: index })));
+    res.json(await HomepageSection.find().sort({ order: 1 }));
+  } catch (e) {
+    next(e);
+  }
+}

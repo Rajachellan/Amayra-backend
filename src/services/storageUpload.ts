@@ -8,7 +8,7 @@ function extFromOriginal(name: string): string {
   return m ? m[1].toLowerCase() : ".bin";
 }
 
-const R2_FOLDERS = new Set(["products", "categories", "banners", "blogs", "misc"]);
+const R2_FOLDERS = new Set(["products", "categories", "banners", "blogs", "promotional", "misc"]);
 
 function objectKey(originalname: string, folder: string): string {
   const safe = originalname.replace(/[^a-zA-Z0-9._-]/g, "_") || "image";
@@ -70,7 +70,7 @@ async function uploadToR2(
   originalname: string,
   contentType: string,
   folder: string
-): Promise<string> {
+): Promise<{ url: string; key: string }> {
   const endpoint = r2S3Endpoint();
   const bucket = process.env.R2_BUCKET_NAME!;
   const publicBase = process.env.R2_PUBLIC_BASE_URL!.replace(/\/$/, "");
@@ -115,14 +115,14 @@ async function uploadToR2(
     }
   }
 
-  return `${publicBase}/${key}`;
+  return { url: `${publicBase}/${key}`, key };
 }
 
 async function uploadToCloudflareImages(
   buffer: Buffer,
   originalname: string,
   contentType: string
-): Promise<string> {
+): Promise<{ url: string; key: string }> {
   const accountId = process.env.CF_IMAGES_ACCOUNT_ID!;
   const token = process.env.CF_IMAGES_API_TOKEN!;
   const form = new FormData();
@@ -156,27 +156,31 @@ async function uploadToCloudflareImages(
   if (!variants?.length) throw new Error("Cloudflare Images: no variants in response");
   const preferred =
     variants.find((v) => v.includes("/public")) ?? variants[variants.length - 1] ?? variants[0];
-  return preferred;
+  const key = preferred.split("/").slice(-2, -1)[0] || preferred;
+  return { url: preferred, key };
 }
 
-async function saveLocal(buffer: Buffer, originalname: string, folder: string): Promise<string> {
+async function saveLocal(buffer: Buffer, originalname: string, folder: string): Promise<{ url: string; key: string }> {
   const prefix = R2_FOLDERS.has(folder) ? folder : "misc";
   const uploadDir = path.join(process.cwd(), "uploads", prefix);
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
   const filename = `${Date.now()}-${randomBytes(4).toString("hex")}${extFromOriginal(originalname)}`;
+  const key = `${prefix}/${filename}`;
   await fs.promises.writeFile(path.join(uploadDir, filename), buffer);
-  return `/uploads/${prefix}/${filename}`;
+  return { url: `/uploads/${key}`, key };
 }
 
-export type UploadFolder = "products" | "categories" | "banners" | "blogs" | "misc";
+export type UploadFolder = "products" | "categories" | "banners" | "blogs" | "promotional" | "misc";
 
-/** Persists an uploaded image and returns the public URL (absolute for R2 / CF Images, path for local). */
+export type UploadResult = { url: string; key: string };
+
+/** Persists an uploaded image and returns public URL + storage key. */
 export async function storeUploadedFile(
   buffer: Buffer,
   originalname: string,
   mimetype: string,
   options?: { folder?: UploadFolder }
-): Promise<string> {
+): Promise<UploadResult> {
   const folder = options?.folder && R2_FOLDERS.has(options.folder) ? options.folder : "misc";
   const driver = resolveDriver();
   if (driver === "r2") {

@@ -46,26 +46,35 @@ export type NormalizedPickup = {
 
 /** Normalize various Shiprocket pickup list payload shapes */
 export async function listPickupLocations(): Promise<NormalizedPickup[]> {
-  const data = await srFetch("/v1/external/settings/company/addpickup", { method: "GET" }) as Record<
+  const data = (await srFetch("/v1/external/settings/company/pickup", { method: "GET" })) as Record<
     string,
     unknown
   >;
 
+  if (typeof data.status_code === "number" && data.status_code >= 400) {
+    srThrow(data, "Shiprocket pickups request failed");
+  }
   if (typeof data.success === "boolean" && data.success === false) {
     srThrow(data, "Shiprocket pickups request failed");
   }
 
   let raw: unknown[] = [];
-  if (Array.isArray(data.data)) raw = data.data as unknown[];
-  else if (
-    typeof data.data === "object" &&
-    data.data !== null &&
-    Array.isArray((data.data as { shipping_address?: unknown[] }).shipping_address)
-  ) {
-    raw = (data.data as { shipping_address: unknown[] }).shipping_address;
+  const payload = data.data;
+  if (Array.isArray(payload)) {
+    raw = payload;
+  } else if (typeof payload === "object" && payload !== null) {
+    const p = payload as Record<string, unknown>;
+    if (Array.isArray(p.recent_addresses) && p.recent_addresses.length > 0) {
+      raw = p.recent_addresses;
+    } else if (Array.isArray(p.shipping_address)) {
+      raw = p.shipping_address;
+    } else if (p.shipping_address && typeof p.shipping_address === "object") {
+      raw = [p.shipping_address];
+    }
   }
 
   const out: NormalizedPickup[] = [];
+  const seen = new Set<string>();
   for (const row of raw) {
     if (!row || typeof row !== "object") continue;
     const o = row as Record<string, unknown>;
@@ -79,12 +88,17 @@ export async function listPickupLocations(): Promise<NormalizedPickup[]> {
       (typeof o.pin_code === "number" ? String(o.pin_code) : "") ||
       (typeof o.pincode === "string" && o.pincode) ||
       "";
-    if (nickname && pin) out.push({
-      nickname: nickname.trim(),
-      pinCode: pin.trim(),
-      city: typeof o.city === "string" ? o.city : undefined,
-      phone: typeof o.phone === "string" ? o.phone : typeof o.phone === "number" ? String(o.phone) : undefined,
-    });
+    if (nickname && pin) {
+      const key = nickname.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        nickname: nickname.trim(),
+        pinCode: pin.trim(),
+        city: typeof o.city === "string" ? o.city : undefined,
+        phone: typeof o.phone === "string" ? o.phone : typeof o.phone === "number" ? String(o.phone) : undefined,
+      });
+    }
   }
   return out;
 }
@@ -182,4 +196,78 @@ export function extractSrOrderIdFromCreateResponse(data: Record<string, unknown>
   if (typeof v === "number" && Number.isFinite(v)) return String(v);
   if (typeof v === "string" && v.trim()) return v.trim();
   return null;
+}
+
+export type PublicTrackingActivity = {
+  date: string;
+  status: string;
+  activity: string;
+  location?: string;
+};
+
+export type PublicTrackingInfo = {
+  awbCode: string;
+  currentStatus?: string;
+  courierName?: string;
+  expectedDelivery?: string;
+  trackingUrl?: string;
+  activities: PublicTrackingActivity[];
+  message?: string;
+};
+
+export function normalizeTrackingResponse(data: unknown, awbCode: string): PublicTrackingInfo {
+  const root = data as Record<string, unknown>;
+  const td = (root.tracking_data ?? root.data ?? root) as Record<string, unknown>;
+  const track = Array.isArray(td.shipment_track) ? (td.shipment_track[0] as Record<string, unknown>) : undefined;
+  const activitiesRaw = Array.isArray(td.shipment_track_activities) ? td.shipment_track_activities : [];
+
+  const activities: PublicTrackingActivity[] = activitiesRaw
+    .filter((a) => a && typeof a === "object")
+    .map((a) => {
+      const row = a as Record<string, unknown>;
+      return {
+        date: typeof row.date === "string" ? row.date : "",
+        status: typeof row.status === "string" ? row.status : "",
+        activity: typeof row.activity === "string" ? row.activity : "",
+        location: typeof row.location === "string" ? row.location : undefined,
+      };
+    })
+    .filter((a) => a.activity || a.status);
+
+  const currentStatus =
+    (typeof track?.current_status === "string" && track.current_status) ||
+    activities[0]?.activity ||
+    undefined;
+
+  const edd =
+    (typeof track?.edd === "string" && track.edd) ||
+    (typeof td.etd === "string" && td.etd) ||
+    (typeof td.edd === "string" && td.edd) ||
+    undefined;
+
+  const trackingUrl =
+    (typeof td.track_url === "string" && td.track_url) ||
+    `https://shiprocket.co/tracking/${encodeURIComponent(awbCode)}`;
+
+  const err = td.error;
+  const message = typeof err === "string" && err ? err : undefined;
+
+  return {
+    awbCode,
+    currentStatus,
+    courierName: typeof track?.courier_name === "string" ? track.courier_name : undefined,
+    expectedDelivery: edd,
+    trackingUrl,
+    activities,
+    message,
+  };
+}
+
+export async function trackByAwb(awbCode: string): Promise<PublicTrackingInfo> {
+  const awb = awbCode.trim();
+  if (!awb) throw new AppError(400, "AWB code required");
+  const data = await srFetch(`/v1/external/courier/track/awb/${encodeURIComponent(awb)}`, {
+    method: "GET",
+  });
+  return normalizeTrackingResponse(data, awb);
 }

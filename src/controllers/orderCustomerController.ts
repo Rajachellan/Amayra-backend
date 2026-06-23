@@ -11,8 +11,39 @@ import {
   type ShippingAddressInput,
 } from "../services/checkoutService.js";
 import { createRazorpayOrder } from "../services/razorpayService.js";
+import { trackByAwb } from "../services/shiprocketService.js";
 import { AppError } from "../utils/AppError.js";
 import { mergeOrderListFilter, orderIsVisibleToCustomer } from "../utils/orderListVisibility.js";
+
+type ShiprocketPublic = {
+  awbCode?: string;
+  courierName?: string;
+  trackingUrl?: string;
+  lastStatus?: string;
+  syncedAt?: string;
+};
+
+function sanitizeShiprocket(sr: unknown): ShiprocketPublic | undefined {
+  if (!sr || typeof sr !== "object") return undefined;
+  const o = sr as Record<string, unknown>;
+  const awbCode = typeof o.awbCode === "string" ? o.awbCode : undefined;
+  const trackingUrl = typeof o.trackingUrl === "string" ? o.trackingUrl : undefined;
+  if (!awbCode && !trackingUrl) return undefined;
+  return {
+    awbCode,
+    courierName: typeof o.courierName === "string" ? o.courierName : undefined,
+    trackingUrl,
+    lastStatus: typeof o.lastStatus === "string" ? o.lastStatus : undefined,
+    syncedAt: o.syncedAt ? new Date(o.syncedAt as string | Date).toISOString() : undefined,
+  };
+}
+
+function sanitizeOrderForCustomer<T extends Record<string, unknown>>(order: T) {
+  return {
+    ...order,
+    shiprocket: sanitizeShiprocket(order.shiprocket),
+  };
+}
 
 export async function postCheckout(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -146,7 +177,7 @@ export async function listMyOrders(req: Request, res: Response, next: NextFuncti
     ]);
 
     res.json({
-      items,
+      items: items.map((o) => sanitizeOrderForCustomer(o as Record<string, unknown>)),
       total,
       page,
       pages: Math.ceil(total / limit),
@@ -169,7 +200,51 @@ export async function getMyOrder(req: Request, res: Response, next: NextFunction
     if (!order) throw new AppError(404, "Order not found");
     if (!orderIsVisibleToCustomer(order))
       throw new AppError(404, "Order not found");
-    res.json(order);
+    res.json(sanitizeOrderForCustomer(order as Record<string, unknown>));
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getMyOrderTracking(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const customerId = (req as Request & { customerId?: string }).customerId;
+    if (!customerId) throw new AppError(401, "Unauthorized");
+    const { id } = req.params;
+
+    const order = await Order.findOne({ _id: id, customer: customerId }).lean();
+    if (!order) throw new AppError(404, "Order not found");
+    if (!orderIsVisibleToCustomer(order)) throw new AppError(404, "Order not found");
+
+    const shiprocket = sanitizeShiprocket(order.shiprocket);
+    if (!shiprocket?.awbCode) {
+      res.json({
+        orderStatus: order.status,
+        shiprocket: null,
+        tracking: null,
+        message: "Tracking will appear once your order is shipped.",
+      });
+      return;
+    }
+
+    let tracking = null;
+    try {
+      tracking = await trackByAwb(shiprocket.awbCode);
+    } catch {
+      tracking = {
+        awbCode: shiprocket.awbCode,
+        trackingUrl: shiprocket.trackingUrl,
+        currentStatus: shiprocket.lastStatus,
+        activities: [],
+        message: "Live tracking is temporarily unavailable. Use the track link below.",
+      };
+    }
+
+    res.json({
+      orderStatus: order.status,
+      shiprocket,
+      tracking,
+    });
   } catch (e) {
     next(e);
   }
