@@ -8,9 +8,9 @@ const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/amayra";
 async function main() {
   await connectDb(mongoUri);
   const app = createApp();
-  app.listen(port, () => {
-    console.log(`API listening on http://localhost:${port}`);
-    console.log("Environment reloaded.");
+  const host = process.env.HOST ?? "0.0.0.0";
+  app.listen(port, host, () => {
+    console.log(`API listening on http://${host}:${port}`);
   });
 }
 
