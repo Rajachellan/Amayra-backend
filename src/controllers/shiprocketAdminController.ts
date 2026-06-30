@@ -215,7 +215,7 @@ export async function postOrderShiprocketShipment(req: Request, res: Response, n
     if (!fresh) throw new AppError(404, "Order not found");
 
     const cust = fresh.customer as { email?: string } | null;
-    const customerEmail = cust?.email?.trim() || process.env.SHIPROCKET_FALLBACK_EMAIL || "noreply@amayra.local";
+    const customerEmail = cust?.email?.trim() || process.env.SHIPROCKET_FALLBACK_EMAIL || "noreply@mairiijewels.com";
 
     const adhocPayload = buildAdhocPayload({
       order: {
