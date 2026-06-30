@@ -23,7 +23,18 @@ export async function login(
       secret,
       { expiresIn: "7d" }
     );
-    res.json({ token, admin: { id: admin._id, email: admin.email, role: admin.role } });
+    const adminPayload = {
+      id: admin._id.toString(),
+      email: admin.email,
+      role: admin.role,
+    };
+    res.json({
+      token,
+      admin: adminPayload,
+      user: adminPayload,
+      success: true,
+      message: "Login successful",
+    });
   } catch (e) {
     next(e);
   }

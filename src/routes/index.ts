@@ -34,6 +34,8 @@ const memoryUpload = multer({
 export const router = Router();
 
 router.post("/auth/login", authController.login);
+router.post("/api/admin/login", authController.login);
+router.post("/admin/login", authController.login);
 
 router.post("/auth/customer/register", customerAuthController.registerCustomer);
 router.post("/auth/customer/login", customerAuthController.loginCustomer);
