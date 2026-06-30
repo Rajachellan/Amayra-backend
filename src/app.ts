@@ -13,6 +13,8 @@ export function createApp() {
   const isDev = process.env.NODE_ENV !== "production";
   const lanOrigin =
     /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+  /** Production storefront + admin on mairiijewels.com (Coolify / Vercel). */
+  const mairiijewelsOrigin = /^https:\/\/([a-z0-9-]+\.)*mairiijewels\.com$/i;
 
   app.post("/webhooks/razorpay", webhookRaw, postRazorpayWebhook);
   app.post("/api/webhooks/razorpay", webhookRaw, postRazorpayWebhook);
@@ -23,6 +25,7 @@ export function createApp() {
         if (!origin) return callback(null, true);
         if (corsAllowList.length === 0) return callback(null, true);
         if (corsAllowList.includes(origin)) return callback(null, true);
+        if (mairiijewelsOrigin.test(origin)) return callback(null, true);
         if (isDev && lanOrigin.test(origin)) return callback(null, true);
         callback(null, false);
       },
