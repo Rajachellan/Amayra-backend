@@ -1,7 +1,7 @@
 import "dotenv/config";
-import bcrypt from "bcryptjs";
 import mongoose from "mongoose";
 import { connectDb } from "../config/db.js";
+import { hashPassword } from "../common/security/password.js";
 import { Admin } from "../models/Admin.js";
 import { Category } from "../models/Category.js";
 import { Collection } from "../models/Collection.js";
@@ -35,7 +35,7 @@ async function run() {
   const adminPass = process.env.ADMIN_PASSWORD || "changeme";
   await Admin.create({
     email: (process.env.ADMIN_EMAIL || "admin@amayra.local").toLowerCase(),
-    passwordHash: await bcrypt.hash(adminPass, 10),
+    passwordHash: await hashPassword(adminPass),
     role: "admin",
   });
 

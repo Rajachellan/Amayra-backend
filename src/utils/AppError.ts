@@ -1,9 +1,2 @@
-export class AppError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string
-  ) {
-    super(message);
-    this.name = "AppError";
-  }
-}
+/** @deprecated Import from `../common/errors/index.js` */
+export { AppError } from "../common/errors/AppError.js";

@@ -1,22 +1,25 @@
-import "dotenv/config";
-import { createApp } from "./app.js";
-import { connectDb } from "./config/db.js";
+import { createApp } from "./app/createApp.js";
+import { connectDatabase, env, logger } from "./config/index.js";
 import { ensureAdminFromEnv } from "./utils/ensureAdmin.js";
 
-const port = Number(process.env.PORT) || 4000;
-const mongoUri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/amayra";
-
 async function main() {
-  await connectDb(mongoUri);
+  await connectDatabase();
   await ensureAdminFromEnv();
   const app = createApp();
-  const host = process.env.HOST ?? "0.0.0.0";
-  app.listen(port, host, () => {
-    console.log(`API listening on http://${host}:${port}`);
+  app.listen(env.PORT, env.HOST, () => {
+    logger.info(
+      { env: env.NODE_ENV, host: env.HOST, port: env.PORT },
+      `API listening on http://${env.HOST}:${env.PORT}`
+    );
   });
 }
 
 main().catch((err) => {
-  console.error(err);
+  logger.error(
+    {
+      err: err instanceof Error ? { message: err.message, stack: err.stack } : String(err),
+    },
+    "Fatal startup error"
+  );
   process.exit(1);
 });
