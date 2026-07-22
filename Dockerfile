@@ -23,6 +23,7 @@ COPY package.json package-lock.json ./
 COPY scripts/prepare.mjs ./scripts/prepare.mjs
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
+RUN mkdir -p /app/logs /app/uploads && chown -R amayra:amayra /app
 USER amayra
 EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

@@ -4,9 +4,20 @@ import pino from "pino";
 import { env, isDevelopment } from "./env.js";
 
 const logsDir = path.join(process.cwd(), "logs");
-if (!fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+
+function canUseFileLogs(): boolean {
+  try {
+    if (!fs.existsSync(logsDir)) {
+      fs.mkdirSync(logsDir, { recursive: true });
+    }
+    fs.accessSync(logsDir, fs.constants.W_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
+
+const fileLogsEnabled = canUseFileLogs();
 
 function appendStream(filename: string) {
   return fs.createWriteStream(path.join(logsDir, filename), { flags: "a" });
@@ -29,12 +40,16 @@ const baseOptions: pino.LoggerOptions = {
   },
 };
 
-const streams: pino.StreamEntry[] = [
-  { level: env.LOG_LEVEL, stream: appendStream("combined.log") },
-  { level: "error", stream: appendStream("error.log") },
-  { level: "warn", stream: appendStream("security.log") },
-  { level: "info", stream: appendStream("access.log") },
-];
+const streams: pino.StreamEntry[] = [];
+
+if (fileLogsEnabled) {
+  streams.push(
+    { level: env.LOG_LEVEL, stream: appendStream("combined.log") },
+    { level: "error", stream: appendStream("error.log") },
+    { level: "warn", stream: appendStream("security.log") },
+    { level: "info", stream: appendStream("access.log") }
+  );
+}
 
 if (isDevelopment) {
   streams.push({
@@ -48,7 +63,11 @@ if (isDevelopment) {
   streams.push({ level: env.LOG_LEVEL, stream: process.stdout });
 }
 
-export const logger = pino(baseOptions, pino.multistream(streams));
+export const logger =
+  streams.length === 1
+    ? pino(baseOptions, streams[0].stream)
+    : pino(baseOptions, pino.multistream(streams));
+
 export const securityLogger = logger.child({ channel: "security" });
 export const accessLogger = logger.child({ channel: "access" });
 
