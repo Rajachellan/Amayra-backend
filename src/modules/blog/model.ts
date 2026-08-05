@@ -7,6 +7,14 @@ const blogSchema = new Schema(
     excerpt: { type: String },
     content: { type: String, required: true },
     coverImage: { type: String },
+    pdfUrl: { type: String },
+    linkType: {
+      type: String,
+      enum: ["product", "category", "none"],
+      default: "none",
+    },
+    product: { type: Schema.Types.ObjectId, ref: "Product" },
+    category: { type: Schema.Types.ObjectId, ref: "Category" },
     author: { type: String },
     tags: [{ type: String }],
     status: {

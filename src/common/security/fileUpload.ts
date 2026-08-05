@@ -8,9 +8,10 @@ const ALLOWED_MIME = new Set([
   "image/webp",
   "image/gif",
   "image/avif",
+  "application/pdf",
 ]);
 
-const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif", "avif"]);
+const ALLOWED_EXT = new Set(["jpg", "jpeg", "png", "webp", "gif", "avif", "pdf"]);
 
 const DANGEROUS_EXT = /\.(exe|sh|bat|cmd|ps1|js|mjs|cjs|php|py|rb|jar|dll|so|html|htm|svg|xml)$/i;
 
@@ -21,7 +22,10 @@ export async function assertSafeImageUpload(
 ): Promise<{ mime: string; ext: string }> {
   if (!buffer?.length) throw new AppError(400, "Empty upload");
   if (buffer.length > env.UPLOAD_MAX_BYTES) {
-    throw new AppError(400, `File too large (max ${Math.floor(env.UPLOAD_MAX_BYTES / (1024 * 1024))}MB)`);
+    throw new AppError(
+      400,
+      `File too large (max ${Math.floor(env.UPLOAD_MAX_BYTES / (1024 * 1024))}MB)`
+    );
   }
   if (DANGEROUS_EXT.test(originalname)) {
     throw new AppError(400, "File type not allowed");
@@ -29,11 +33,18 @@ export async function assertSafeImageUpload(
 
   const detected = await fileTypeFromBuffer(buffer);
   if (!detected || !ALLOWED_MIME.has(detected.mime) || !ALLOWED_EXT.has(detected.ext)) {
-    throw new AppError(400, "Only image uploads are allowed (jpeg, png, webp, gif, avif)");
+    throw new AppError(
+      400,
+      "Only image and PDF uploads are allowed (jpeg, png, webp, gif, avif, pdf)"
+    );
   }
 
   // Declared MIME should match sniff when provided
-  if (declaredMime && declaredMime !== "application/octet-stream" && !ALLOWED_MIME.has(declaredMime)) {
+  if (
+    declaredMime &&
+    declaredMime !== "application/octet-stream" &&
+    !ALLOWED_MIME.has(declaredMime)
+  ) {
     throw new AppError(400, "Invalid content type");
   }
 

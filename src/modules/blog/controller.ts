@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
-import { Blog } from '../../models/Blog.js';
-import { AppError } from '../../utils/AppError.js';
-import { toSlug } from '../../utils/slug.js';
+import { Blog } from "../../models/Blog.js";
+import { AppError } from "../../utils/AppError.js";
+import { toSlug } from "../../utils/slug.js";
 
 export async function listBlogs(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -10,9 +10,14 @@ export async function listBlogs(req: Request, res: Response, next: NextFunction)
     const skip = (page - 1) * limit;
 
     const filter = { status: "published" };
-    
+
     const [items, total] = await Promise.all([
-      Blog.find(filter).sort({ publishedAt: -1, createdAt: -1 }).skip(skip).limit(limit),
+      Blog.find(filter)
+        .populate("product", "name slug price salePrice images")
+        .populate("category", "name slug")
+        .sort({ publishedAt: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
       Blog.countDocuments(filter),
     ]);
 
@@ -27,10 +32,16 @@ export async function listBlogs(req: Request, res: Response, next: NextFunction)
   }
 }
 
-export async function getBlogBySlug(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getBlogBySlug(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { slug } = req.params;
-    const doc = await Blog.findOne({ slug, status: "published" });
+    const doc = await Blog.findOne({ slug, status: "published" })
+      .populate("product", "name slug price salePrice images")
+      .populate("category", "name slug");
     if (!doc) throw new AppError(404, "Blog not found");
     res.json(doc);
   } catch (e) {
@@ -38,14 +49,23 @@ export async function getBlogBySlug(req: Request, res: Response, next: NextFunct
   }
 }
 
-export async function listBlogsAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listBlogsAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
     const skip = (page - 1) * limit;
-    
+
     const [items, total] = await Promise.all([
-      Blog.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Blog.find()
+        .populate("product", "name slug")
+        .populate("category", "name slug")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
       Blog.countDocuments(),
     ]);
 
@@ -60,10 +80,16 @@ export async function listBlogsAdmin(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function getBlogByIdAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getBlogByIdAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { id } = req.params;
-    const doc = await Blog.findById(id);
+    const doc = await Blog.findById(id)
+      .populate("product", "name slug")
+      .populate("category", "name slug");
     if (!doc) throw new AppError(404, "Blog not found");
     res.json(doc);
   } catch (e) {
@@ -76,7 +102,7 @@ export async function createBlog(req: Request, res: Response, next: NextFunction
     const body = req.body as Record<string, unknown>;
     const title = String(body.title || "").trim();
     if (!title) throw new AppError(400, "Title is required");
-    
+
     const slug = String(body.slug || "").trim() || toSlug(title);
     const exists = await Blog.findOne({ slug });
     if (exists) throw new AppError(409, "Slug already exists");
@@ -92,6 +118,10 @@ export async function createBlog(req: Request, res: Response, next: NextFunction
       excerpt: body.excerpt,
       content,
       coverImage: body.coverImage,
+      pdfUrl: body.pdfUrl || undefined,
+      linkType: body.linkType || "none",
+      product: body.product || undefined,
+      category: body.category || undefined,
       author: body.author,
       tags: Array.isArray(body.tags) ? body.tags : [],
       status,
@@ -108,7 +138,7 @@ export async function updateBlog(req: Request, res: Response, next: NextFunction
   try {
     const { id } = req.params;
     const body = req.body as Record<string, unknown>;
-    
+
     const existing = await Blog.findById(id);
     if (!existing) throw new AppError(404, "Blog not found");
 
@@ -131,6 +161,18 @@ export async function updateBlog(req: Request, res: Response, next: NextFunction
     }
     if (body.coverImage !== undefined) {
       existing.coverImage = String(body.coverImage).trim() || undefined;
+    }
+    if (body.pdfUrl !== undefined) {
+      existing.pdfUrl = body.pdfUrl ? String(body.pdfUrl).trim() : undefined;
+    }
+    if (body.linkType !== undefined) {
+      existing.linkType = body.linkType as any;
+    }
+    if (body.product !== undefined) {
+      existing.product = body.product ? (body.product as any) : undefined;
+    }
+    if (body.category !== undefined) {
+      existing.category = body.category ? (body.category as any) : undefined;
     }
     if (body.author !== undefined) {
       existing.author = String(body.author).trim() || undefined;
