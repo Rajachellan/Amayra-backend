@@ -45,7 +45,12 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   logger.error(
     {
       requestId,
-      err: err instanceof Error ? { message: err.message, name: err.name, stack: isProduction ? undefined : err.stack } : String(err),
+      err:
+        err instanceof Error
+          ? { message: err.message, name: err.name, stack: isProduction ? undefined : err.stack }
+          : typeof err === "object" && err !== null
+            ? err
+            : String(err),
     },
     "Unhandled error"
   );
