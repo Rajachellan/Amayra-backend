@@ -1,14 +1,15 @@
 import type { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import { Product } from '../../models/Product.js';
-import { Collection } from '../../models/Collection.js';
-import { AppError } from '../../utils/AppError.js';
-import { toSlug } from '../../utils/slug.js';
-import { resolveCategoryIdBySlug } from '../../services/categoryService.js';
-import { resolveOccasionIdBySlug } from '../../services/occasionService.js';
+import { Product } from "../../models/Product.js";
+import { Collection } from "../../models/Collection.js";
+import { AppError } from "../../utils/AppError.js";
+import { toSlug } from "../../utils/slug.js";
+import { resolveCategoryIdBySlug } from "../../services/categoryService.js";
+import { resolveOccasionIdBySlug } from "../../services/occasionService.js";
 
 function publishedFilter(extra: Record<string, unknown> = {}) {
-  return { status: { $in: ["published", null] }, ...extra };
+  // stock: { $gt: 0 } hides out-of-stock products from all public storefront queries
+  return { status: { $in: ["published", null] }, stock: { $gt: 0 }, ...extra };
 }
 
 export async function createProduct(
@@ -33,11 +34,7 @@ export async function createProduct(
   }
 }
 
-export async function listProducts(
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> {
+export async function listProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const {
       category,
@@ -61,7 +58,7 @@ export async function listProducts(
     if (typeof category === "string" && category === "new") {
       const since = new Date();
       since.setDate(since.getDate() - 90);
-      filter.createdAt = { $gte: since };
+      filter.$or = [{ newArrival: true }, { createdAt: { $gte: since } }];
     } else if (typeof category === "string" && category && category !== "all") {
       const cid = await resolveCategoryIdBySlug(category);
       if (!cid) {
@@ -100,7 +97,9 @@ export async function listProducts(
       filter.name = { $regex: q.trim(), $options: "i" };
     }
     if (typeof color === "string" && color.trim()) {
-      filter.color = { $regex: new RegExp(`^${color.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") };
+      filter.color = {
+        $regex: new RegExp(`^${color.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+      };
     }
     if (maxPrice != null && String(maxPrice).trim() !== "") {
       const mp = Number(maxPrice);

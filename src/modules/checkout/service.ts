@@ -1,8 +1,8 @@
 import mongoose from "mongoose";
-import { Product } from '../../models/Product.js';
-import { Order } from '../../models/Order.js';
-import { Payment } from '../../models/Payment.js';
-import { AppError } from '../../utils/AppError.js';
+import { Product } from "../../models/Product.js";
+import { Order } from "../../models/Order.js";
+import { Payment } from "../../models/Payment.js";
+import { AppError } from "../../utils/AppError.js";
 
 const publishedStatuses = ["published", null] as unknown[];
 
@@ -115,7 +115,7 @@ export async function buildOrderDraft(
   }
 
   subtotal = Math.round(subtotal * 100) / 100;
-  const GST = 0.03;
+  const GST = 0;
   const shipping = 0;
   const { tax, total } = normalizeOrderTotal(subtotal, GST, shipping);
 
@@ -190,8 +190,13 @@ export async function createPendingOrderFromDraft(args: {
   return { order, payment };
 }
 
-async function decrementStock(session: mongoose.ClientSession | null, orderId: mongoose.Types.ObjectId) {
-  const order = await Order.findById(orderId).session(session ?? null).exec();
+async function decrementStock(
+  session: mongoose.ClientSession | null,
+  orderId: mongoose.Types.ObjectId
+) {
+  const order = await Order.findById(orderId)
+    .session(session ?? null)
+    .exec();
   if (!order?.items?.length) return;
   const productAggregates = new Map<string, number>();
   for (const item of order.items) {
@@ -203,7 +208,7 @@ async function decrementStock(session: mongoose.ClientSession | null, orderId: m
     const result = await Product.updateOne(
       { _id: pid, stock: { $gte: qty } },
       {
-        $inc: { stock: -qty, soldCount: qty },
+        $inc: { stock: -qty, soldCount: qty, trendingScore: qty },
       }
     ).session(session ?? null);
     if (!result.modifiedCount) {
@@ -254,9 +259,11 @@ export async function markOrderPaid(args: {
 
     paymentBefore.status = "captured";
     if (args.razorpayPaymentId) paymentBefore.razorpayPaymentId = args.razorpayPaymentId;
-    if (args.razorpaySignature !== undefined) paymentBefore.razorpaySignature = args.razorpaySignature ?? undefined;
+    if (args.razorpaySignature !== undefined)
+      paymentBefore.razorpaySignature = args.razorpaySignature ?? undefined;
     if (args.method) paymentBefore.method = args.method;
-    if (args.appendRaw) paymentBefore.rawPayload = { ...(paymentBefore.rawPayload ?? {}), ...args.appendRaw };
+    if (args.appendRaw)
+      paymentBefore.rawPayload = { ...(paymentBefore.rawPayload ?? {}), ...args.appendRaw };
     await paymentBefore.save({ session });
 
     orderBefore.status = "paid";

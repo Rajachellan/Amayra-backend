@@ -45,6 +45,7 @@ const productSchema = new Schema(
     featured: { type: Boolean, default: false },
     trending: { type: Boolean, default: false },
     masterpiece: { type: Boolean, default: false },
+    newArrival: { type: Boolean, default: false },
     soldCount: { type: Number, default: 0 },
     trendingScore: { type: Number, default: 0 },
     seoTitle: { type: String },
