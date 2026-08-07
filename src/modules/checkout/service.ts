@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Product } from "../../models/Product.js";
 import { Order } from "../../models/Order.js";
 import { Payment } from "../../models/Payment.js";
+import { PromotionalBanner } from "../../models/PromotionalBanner.js";
 import { AppError } from "../../utils/AppError.js";
 
 const publishedStatuses = ["published", null] as unknown[];
@@ -45,7 +46,8 @@ export async function generateOrderNumber(): Promise<string> {
 export async function buildOrderDraft(
   _customerId: mongoose.Types.ObjectId,
   lines: CheckoutLineInput[],
-  shippingAddress: ShippingAddressInput
+  shippingAddress: ShippingAddressInput,
+  couponCode?: string
 ): Promise<{
   orderNumber: string;
   items: {
@@ -59,9 +61,11 @@ export async function buildOrderDraft(
     image?: string;
   }[];
   subtotal: number;
+  discount: number;
   tax: number;
   shipping: number;
   total: number;
+  couponCode?: string;
 }> {
   if (!lines?.length) throw new AppError(400, "Cart is empty");
   const slugCounts = new Map<string, number>();
@@ -115,9 +119,33 @@ export async function buildOrderDraft(
   }
 
   subtotal = Math.round(subtotal * 100) / 100;
+
+  let discount = 0;
+  if (couponCode) {
+    const code = couponCode.trim().toUpperCase();
+    if (code === "WELCOME5") {
+      discount = Math.round(subtotal * 0.05 * 100) / 100;
+    } else {
+      const banner = await PromotionalBanner.findOne({
+        couponCode: { $regex: new RegExp(`^${code}$`, "i") },
+      });
+      if (banner) {
+        let pct = 0.05;
+        const match = code.match(/\d+/);
+        if (match) {
+          const val = parseInt(match[0], 10);
+          if (val > 0 && val <= 100) pct = val / 100;
+        }
+        discount = Math.round(subtotal * pct * 100) / 100;
+      } else {
+        throw new AppError(400, `Invalid coupon code: ${couponCode}`);
+      }
+    }
+  }
+
   const GST = 0;
   const shipping = 0;
-  const { tax, total } = normalizeOrderTotal(subtotal, GST, shipping);
+  const { tax, total } = normalizeOrderTotal(subtotal - discount, GST, shipping);
 
   const addr = shippingAddress;
   const fullName = addr.fullName?.trim();
@@ -136,9 +164,11 @@ export async function buildOrderDraft(
     orderNumber,
     items,
     subtotal,
+    discount,
     tax,
     shipping,
     total,
+    couponCode: couponCode ? couponCode.trim().toUpperCase() : undefined,
   };
 }
 
@@ -165,6 +195,8 @@ export async function createPendingOrderFromDraft(args: {
       country: (args.shippingAddress.country ?? "IN").trim() || "IN",
     },
     subtotal: d.subtotal,
+    discount: d.discount,
+    couponCode: d.couponCode,
     tax: d.tax,
     shipping: d.shipping,
     total: d.total,

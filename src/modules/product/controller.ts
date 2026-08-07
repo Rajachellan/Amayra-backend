@@ -65,7 +65,7 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
         res.json({ items: [], total: 0, page: 1, pages: 0 });
         return;
       }
-      filter.category = cid;
+      filter.$or = [{ category: cid }, { subCategory: cid }];
     }
     if (typeof subCategory === "string" && subCategory && subCategory !== "all") {
       const sid = await resolveCategoryIdBySlug(subCategory);

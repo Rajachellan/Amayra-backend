@@ -32,6 +32,7 @@ import * as orderCustomerController from "../controllers/orderCustomerController
 import * as orderAdminController from "../controllers/orderAdminController.js";
 import * as shiprocketAdminController from "../controllers/shiprocketAdminController.js";
 import * as paymentAdminController from "../controllers/paymentAdminController.js";
+import * as savedItemsController from "../modules/customer/savedItems.controller.js";
 import { storeUploadedFile } from "../services/storageUpload.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -69,8 +70,16 @@ router.post("/auth/otp/request", otpRateLimiter, otpSlowDown, (_req, res) => {
   res.status(501).json({ message: "OTP not enabled" });
 });
 router.get("/auth/customer/me", authenticateCustomer, customerAuthController.meCustomer);
-router.patch("/auth/customer/me", authenticateCustomer, customerAuthController.updateCustomerProfile);
-router.post("/auth/customer/me/addresses", authenticateCustomer, customerAuthController.addCustomerAddress);
+router.patch(
+  "/auth/customer/me",
+  authenticateCustomer,
+  customerAuthController.updateCustomerProfile
+);
+router.post(
+  "/auth/customer/me/addresses",
+  authenticateCustomer,
+  customerAuthController.addCustomerAddress
+);
 router.patch(
   "/auth/customer/me/addresses/:addressId",
   authenticateCustomer,
@@ -87,6 +96,13 @@ router.post(
   customerAuthController.setDefaultCustomerAddress
 );
 
+router.put("/customer/saved-items/cart", authenticateCustomer, savedItemsController.syncCart);
+router.put(
+  "/customer/saved-items/wishlist",
+  authenticateCustomer,
+  savedItemsController.syncWishlist
+);
+
 router.post(
   "/orders/checkout",
   authenticateCustomer,
@@ -100,7 +116,11 @@ router.post(
   orderCustomerController.postVerifyPayment
 );
 router.get("/orders/me", authenticateCustomer, orderCustomerController.listMyOrders);
-router.get("/orders/:id/tracking", authenticateCustomer, orderCustomerController.getMyOrderTracking);
+router.get(
+  "/orders/:id/tracking",
+  authenticateCustomer,
+  orderCustomerController.getMyOrderTracking
+);
 router.get("/orders/:id", authenticateCustomer, orderCustomerController.getMyOrder);
 
 router.get("/admin/dashboard", authenticateAdmin, dashboardController.getDashboardStats);
@@ -135,7 +155,11 @@ router.put(
   lookbookController.reorderLookbookImages
 );
 router.post("/lookbooks/:id/hotspots", authenticateAdmin, lookbookController.addLookbookHotspot);
-router.post("/admin/lookbooks/:id/hotspots", authenticateAdmin, lookbookController.addLookbookHotspot);
+router.post(
+  "/admin/lookbooks/:id/hotspots",
+  authenticateAdmin,
+  lookbookController.addLookbookHotspot
+);
 router.put(
   "/lookbooks/:id/hotspots/:hotspotId",
   authenticateAdmin,
@@ -157,11 +181,19 @@ router.delete(
   lookbookController.deleteLookbookHotspot
 );
 router.post("/lookbooks/:id/duplicate", authenticateAdmin, lookbookController.duplicateLookbook);
-router.post("/admin/lookbooks/:id/duplicate", authenticateAdmin, lookbookController.duplicateLookbook);
+router.post(
+  "/admin/lookbooks/:id/duplicate",
+  authenticateAdmin,
+  lookbookController.duplicateLookbook
+);
 router.get("/admin/occasions", authenticateAdmin, occasionController.listOccasionsAdmin);
 
 router.get("/admin/orders", authenticateAdmin, orderAdminController.listOrdersAdmin);
-router.get("/admin/shiprocket/pickups", authenticateAdmin, shiprocketAdminController.getShiprocketPickups);
+router.get(
+  "/admin/shiprocket/pickups",
+  authenticateAdmin,
+  shiprocketAdminController.getShiprocketPickups
+);
 router.get(
   "/admin/orders/:id/shiprocket/serviceability",
   authenticateAdmin,
@@ -185,31 +217,75 @@ router.put("/banners/:id", authenticateAdmin, bannerController.updateBanner);
 router.delete("/banners/:id", authenticateAdmin, bannerController.deleteBanner);
 
 router.get("/promotional-banners", promotionalBannerController.listPromotionalBanners);
-router.get("/admin/promotional-banners", authenticateAdmin, promotionalBannerController.listPromotionalBannersAdmin);
-router.post("/promotional-banners", authenticateAdmin, promotionalBannerController.createPromotionalBanner);
-router.put("/promotional-banners/reorder", authenticateAdmin, promotionalBannerController.reorderPromotionalBanners);
+router.get(
+  "/admin/promotional-banners",
+  authenticateAdmin,
+  promotionalBannerController.listPromotionalBannersAdmin
+);
+router.post(
+  "/promotional-banners",
+  authenticateAdmin,
+  promotionalBannerController.createPromotionalBanner
+);
+router.put(
+  "/promotional-banners/reorder",
+  authenticateAdmin,
+  promotionalBannerController.reorderPromotionalBanners
+);
 router.post(
   "/promotional-banners/:id/duplicate",
   authenticateAdmin,
   promotionalBannerController.duplicatePromotionalBanner
 );
-router.put("/promotional-banners/:id", authenticateAdmin, promotionalBannerController.updatePromotionalBanner);
-router.delete("/promotional-banners/:id", authenticateAdmin, promotionalBannerController.deletePromotionalBanner);
+router.put(
+  "/promotional-banners/:id",
+  authenticateAdmin,
+  promotionalBannerController.updatePromotionalBanner
+);
+router.delete(
+  "/promotional-banners/:id",
+  authenticateAdmin,
+  promotionalBannerController.deletePromotionalBanner
+);
 
 router.get("/promotion-layout", promotionLayoutController.getPromotionLayoutPublic);
-router.get("/admin/promotion-layout", authenticateAdmin, promotionLayoutController.getPromotionLayoutAdmin);
-router.put("/admin/promotion-layout", authenticateAdmin, promotionLayoutController.updatePromotionLayoutAdmin);
+router.get(
+  "/admin/promotion-layout",
+  authenticateAdmin,
+  promotionLayoutController.getPromotionLayoutAdmin
+);
+router.put(
+  "/admin/promotion-layout",
+  authenticateAdmin,
+  promotionLayoutController.updatePromotionLayoutAdmin
+);
 
 router.get("/announcements", announcementController.listAnnouncements);
-router.get("/admin/announcements", authenticateAdmin, announcementController.listAnnouncementsAdmin);
+router.get(
+  "/admin/announcements",
+  authenticateAdmin,
+  announcementController.listAnnouncementsAdmin
+);
 router.post("/announcements", authenticateAdmin, announcementController.createAnnouncement);
-router.put("/announcements/reorder", authenticateAdmin, announcementController.reorderAnnouncements);
+router.put(
+  "/announcements/reorder",
+  authenticateAdmin,
+  announcementController.reorderAnnouncements
+);
 router.put("/announcements/:id", authenticateAdmin, announcementController.updateAnnouncement);
 router.delete("/announcements/:id", authenticateAdmin, announcementController.deleteAnnouncement);
 
 router.get("/homepage-settings", homepageSettingsController.getHomepageSettingsPublic);
-router.get("/admin/homepage-settings", authenticateAdmin, homepageSettingsController.getHomepageSettingsAdmin);
-router.put("/admin/homepage-settings", authenticateAdmin, homepageSettingsController.updateHomepageSettingsAdmin);
+router.get(
+  "/admin/homepage-settings",
+  authenticateAdmin,
+  homepageSettingsController.getHomepageSettingsAdmin
+);
+router.put(
+  "/admin/homepage-settings",
+  authenticateAdmin,
+  homepageSettingsController.updateHomepageSettingsAdmin
+);
 
 router.get("/categories", categoryController.listCategories);
 router.get("/categories/tree", categoryController.treeCategories);
@@ -241,11 +317,31 @@ router.put("/occasions/:id", authenticateAdmin, occasionController.updateOccasio
 router.delete("/occasions/:id", authenticateAdmin, occasionController.deleteOccasion);
 
 router.get("/homepage-sections", homepageSectionController.publicHomepageSections);
-router.get("/homepage-sections/admin", authenticateAdmin, homepageSectionController.listHomepageSectionsAdmin);
-router.post("/homepage-sections", authenticateAdmin, homepageSectionController.createHomepageSection);
-router.put("/homepage-sections/reorder", authenticateAdmin, homepageSectionController.reorderHomepageSections);
-router.put("/homepage-sections/:id", authenticateAdmin, homepageSectionController.updateHomepageSection);
-router.delete("/homepage-sections/:id", authenticateAdmin, homepageSectionController.deleteHomepageSection);
+router.get(
+  "/homepage-sections/admin",
+  authenticateAdmin,
+  homepageSectionController.listHomepageSectionsAdmin
+);
+router.post(
+  "/homepage-sections",
+  authenticateAdmin,
+  homepageSectionController.createHomepageSection
+);
+router.put(
+  "/homepage-sections/reorder",
+  authenticateAdmin,
+  homepageSectionController.reorderHomepageSections
+);
+router.put(
+  "/homepage-sections/:id",
+  authenticateAdmin,
+  homepageSectionController.updateHomepageSection
+);
+router.delete(
+  "/homepage-sections/:id",
+  authenticateAdmin,
+  homepageSectionController.deleteHomepageSection
+);
 
 router.get("/blogs", blogController.listBlogs);
 router.get("/blogs/:slug", blogController.getBlogBySlug);
@@ -279,7 +375,9 @@ router.post(
       const q = req.query.folder;
       const folder =
         typeof q === "string" &&
-        ["products", "categories", "banners", "blogs", "promotional", "lookbooks", "misc"].includes(q)
+        ["products", "categories", "banners", "blogs", "promotional", "lookbooks", "misc"].includes(
+          q
+        )
           ? (q as
               | "products"
               | "categories"
@@ -289,12 +387,9 @@ router.post(
               | "lookbooks"
               | "misc")
           : "misc";
-      const result = await storeUploadedFile(
-        req.file.buffer,
-        `upload.${safe.ext}`,
-        safe.mime,
-        { folder }
-      );
+      const result = await storeUploadedFile(req.file.buffer, `upload.${safe.ext}`, safe.mime, {
+        folder,
+      });
       res.json({ url: result.url, key: result.key, imageUrl: result.url, imageKey: result.key });
     } catch (e) {
       if (e instanceof AppError) return next(e);

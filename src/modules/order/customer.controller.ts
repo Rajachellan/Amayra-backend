@@ -1,19 +1,19 @@
 import type { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
 import { validatePaymentVerification } from "razorpay/dist/utils/razorpay-utils.js";
-import { Order } from '../../models/Order.js';
-import { Payment } from '../../models/Payment.js';
+import { Order } from "../../models/Order.js";
+import { Payment } from "../../models/Payment.js";
 import {
   buildOrderDraft,
   createPendingOrderFromDraft,
   markOrderPaid,
   type CheckoutLineInput,
   type ShippingAddressInput,
-} from '../../services/checkoutService.js';
-import { createRazorpayOrder } from '../../services/razorpayService.js';
-import { trackByAwb } from '../../services/shiprocketService.js';
-import { AppError } from '../../utils/AppError.js';
-import { mergeOrderListFilter, orderIsVisibleToCustomer } from '../../utils/orderListVisibility.js';
+} from "../../services/checkoutService.js";
+import { createRazorpayOrder } from "../../services/razorpayService.js";
+import { trackByAwb } from "../../services/shiprocketService.js";
+import { AppError } from "../../utils/AppError.js";
+import { mergeOrderListFilter, orderIsVisibleToCustomer } from "../../utils/orderListVisibility.js";
 
 type ShiprocketPublic = {
   awbCode?: string;
@@ -53,6 +53,7 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
     const body = req.body as {
       items?: CheckoutLineInput[];
       shippingAddress?: ShippingAddressInput;
+      couponCode?: string;
     };
     if (!body.items?.length || !body.shippingAddress)
       throw new AppError(400, "items and shippingAddress required");
@@ -62,7 +63,8 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
     const draft = await buildOrderDraft(
       new mongoose.Types.ObjectId(cid),
       body.items as CheckoutLineInput[],
-      body.shippingAddress as ShippingAddressInput
+      body.shippingAddress as ShippingAddressInput,
+      body.couponCode
     );
 
     const amountPaise = Math.round(draft.total * 100);
@@ -72,8 +74,20 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
       rzOrder = (await createRazorpayOrder(amountPaise, draft.orderNumber, {
         customerId: cid,
       })) as { id: string };
-    } catch (e) {
-      next(e instanceof Error ? new AppError(502, `Razorpay error: ${e.message}`) : e);
+    } catch (e: any) {
+      let msg = "Razorpay payment creation failed";
+      if (
+        e &&
+        typeof e === "object" &&
+        e.error &&
+        typeof e.error === "object" &&
+        e.error.description
+      ) {
+        msg = `Razorpay error: ${e.error.description}`;
+      } else if (e instanceof Error) {
+        msg = `Razorpay error: ${e.message}`;
+      }
+      next(new AppError(400, msg));
       return;
     }
 
@@ -98,7 +112,11 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export async function postVerifyPayment(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function postVerifyPayment(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const customerId = (req as Request & { customerId?: string }).customerId;
     if (!customerId) throw new AppError(401, "Unauthorized");
@@ -193,20 +211,21 @@ export async function getMyOrder(req: Request, res: Response, next: NextFunction
     if (!customerId) throw new AppError(401, "Unauthorized");
     const { id } = req.params;
 
-    const order = await Order.findOne({ _id: id, customer: customerId })
-      .populate("payment")
-      .lean();
+    const order = await Order.findOne({ _id: id, customer: customerId }).populate("payment").lean();
 
     if (!order) throw new AppError(404, "Order not found");
-    if (!orderIsVisibleToCustomer(order))
-      throw new AppError(404, "Order not found");
+    if (!orderIsVisibleToCustomer(order)) throw new AppError(404, "Order not found");
     res.json(sanitizeOrderForCustomer(order as Record<string, unknown>));
   } catch (e) {
     next(e);
   }
 }
 
-export async function getMyOrderTracking(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getMyOrderTracking(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const customerId = (req as Request & { customerId?: string }).customerId;
     if (!customerId) throw new AppError(401, "Unauthorized");
