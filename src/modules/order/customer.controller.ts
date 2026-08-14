@@ -54,6 +54,7 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
       items?: CheckoutLineInput[];
       shippingAddress?: ShippingAddressInput;
       couponCode?: string;
+      paymentMethod?: string;
     };
     if (!body.items?.length || !body.shippingAddress)
       throw new AppError(400, "items and shippingAddress required");
@@ -67,6 +68,28 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
       body.couponCode
     );
 
+    const isCod = body.paymentMethod === "cod" || body.paymentMethod === "COD";
+
+    if (isCod) {
+      const { createCodOrderFromDraft } = await import("../../services/checkoutService.js");
+      const order = await createCodOrderFromDraft({
+        customerId: cid,
+        draft,
+        shippingAddress: body.shippingAddress as ShippingAddressInput,
+      });
+
+      res.status(201).json({
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        paymentMethod: "COD",
+        amount: order.total,
+        currency: "INR",
+        displayTotal: order.total,
+      });
+      return;
+    }
+
+    // Prepaid Razorpay Flow
     const amountPaise = Math.round(draft.total * 100);
 
     let rzOrder: { id: string };

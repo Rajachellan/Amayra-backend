@@ -93,3 +93,16 @@ export async function putOrderAdminStatus(req: Request, res: Response, next: Nex
     next(e);
   }
 }
+
+import { OrderHistory } from "./order-history.model.js";
+
+export async function getOrderHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+  try {
+    const { id } = req.params;
+    const history = await OrderHistory.find({ orderId: id }).sort({ createdAt: -1 });
+    res.json({ items: history });
+  } catch (e) {
+    next(e);
+  }
+}
+

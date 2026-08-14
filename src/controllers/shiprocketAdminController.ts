@@ -1,1 +1,1 @@
-export * from "../modules/shipment/controller.js";
+export * from "../modules/shipping/shipping.controller.js";

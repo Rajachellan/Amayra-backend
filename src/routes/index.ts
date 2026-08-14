@@ -11,6 +11,8 @@ import {
 } from "../common/middleware/rateLimiters.js";
 import { requirePermission } from "../common/security/rbac.js";
 import { assertSafeImageUpload } from "../common/security/fileUpload.js";
+import { hashPassword } from "../common/security/password.js";
+import { Admin } from "../models/Admin.js";
 import { env } from "../config/env.js";
 import * as categoryController from "../controllers/categoryController.js";
 import * as productController from "../controllers/productController.js";
@@ -33,6 +35,8 @@ import * as orderAdminController from "../controllers/orderAdminController.js";
 import * as shiprocketAdminController from "../controllers/shiprocketAdminController.js";
 import * as paymentAdminController from "../controllers/paymentAdminController.js";
 import * as savedItemsController from "../modules/customer/savedItems.controller.js";
+import * as returnController from "../modules/return/return.controller.js";
+import * as inventoryController from "../modules/inventory/inventory.controller.js";
 import { storeUploadedFile } from "../services/storageUpload.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -202,19 +206,39 @@ router.get(
 router.post(
   "/admin/orders/:id/shiprocket/shipment",
   authenticateAdmin,
+  requirePermission("orders:write"),
   shiprocketAdminController.postOrderShiprocketShipment
 );
 router.get("/admin/orders/:id", authenticateAdmin, orderAdminController.getOrderAdmin);
-router.put("/admin/orders/:id/status", authenticateAdmin, orderAdminController.putOrderAdminStatus);
+router.put("/admin/orders/:id/status", authenticateAdmin, requirePermission("orders:write"), orderAdminController.putOrderAdminStatus);
 router.get("/admin/payments", authenticateAdmin, paymentAdminController.listPaymentsAdmin);
 router.get("/admin/payments/:id", authenticateAdmin, paymentAdminController.getPaymentAdmin);
 
+// Returns API
+router.post("/returns", authenticateCustomer, returnController.postCreateReturnRequest);
+router.get("/returns", authenticateCustomer, returnController.getReturnList);
+router.get("/returns/:id", authenticateCustomer, returnController.getReturnById);
+router.get("/admin/returns", authenticateAdmin, returnController.getReturnList);
+router.get("/admin/returns/:id", authenticateAdmin, returnController.getReturnById);
+router.post("/admin/returns/:id/approve", authenticateAdmin, requirePermission("orders:write"), returnController.postApproveReturn);
+router.post("/admin/returns/:id/reject", authenticateAdmin, requirePermission("orders:write"), returnController.postRejectReturn);
+router.post("/admin/returns/:id/receive", authenticateAdmin, requirePermission("orders:write"), returnController.postReceiveReturn);
+router.post("/admin/returns/:id/inspect", authenticateAdmin, requirePermission("orders:write"), returnController.postInspectReturn);
+router.post("/admin/returns/:id/refund", authenticateAdmin, requirePermission("orders:write"), returnController.postRefundReturn);
+
+// Inventory API
+router.get("/admin/inventory/ledger", authenticateAdmin, inventoryController.getInventoryLedger);
+router.get("/admin/inventory/stock", authenticateAdmin, inventoryController.getInventoryStockStatus);
+
+// Order History API
+router.get("/admin/orders/:id/history", authenticateAdmin, orderAdminController.getOrderHistory);
+
 router.get("/banners", bannerController.listBanners);
 router.get("/admin/banners", authenticateAdmin, bannerController.listBannersAdmin);
-router.post("/banners", authenticateAdmin, bannerController.createBanner);
-router.put("/banners/reorder", authenticateAdmin, bannerController.reorderBanners);
-router.put("/banners/:id", authenticateAdmin, bannerController.updateBanner);
-router.delete("/banners/:id", authenticateAdmin, bannerController.deleteBanner);
+router.post("/banners", authenticateAdmin, requirePermission("homepage:write"), bannerController.createBanner);
+router.put("/banners/reorder", authenticateAdmin, requirePermission("homepage:write"), bannerController.reorderBanners);
+router.put("/banners/:id", authenticateAdmin, requirePermission("homepage:write"), bannerController.updateBanner);
+router.delete("/banners/:id", authenticateAdmin, requirePermission("homepage:write"), bannerController.deleteBanner);
 
 router.get("/promotional-banners", promotionalBannerController.listPromotionalBanners);
 router.get(
@@ -225,26 +249,31 @@ router.get(
 router.post(
   "/promotional-banners",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   promotionalBannerController.createPromotionalBanner
 );
 router.put(
   "/promotional-banners/reorder",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   promotionalBannerController.reorderPromotionalBanners
 );
 router.post(
   "/promotional-banners/:id/duplicate",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   promotionalBannerController.duplicatePromotionalBanner
 );
 router.put(
   "/promotional-banners/:id",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   promotionalBannerController.updatePromotionalBanner
 );
 router.delete(
   "/promotional-banners/:id",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   promotionalBannerController.deletePromotionalBanner
 );
 
@@ -257,6 +286,7 @@ router.get(
 router.put(
   "/admin/promotion-layout",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   promotionLayoutController.updatePromotionLayoutAdmin
 );
 
@@ -266,14 +296,15 @@ router.get(
   authenticateAdmin,
   announcementController.listAnnouncementsAdmin
 );
-router.post("/announcements", authenticateAdmin, announcementController.createAnnouncement);
+router.post("/announcements", authenticateAdmin, requirePermission("homepage:write"), announcementController.createAnnouncement);
 router.put(
   "/announcements/reorder",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   announcementController.reorderAnnouncements
 );
-router.put("/announcements/:id", authenticateAdmin, announcementController.updateAnnouncement);
-router.delete("/announcements/:id", authenticateAdmin, announcementController.deleteAnnouncement);
+router.put("/announcements/:id", authenticateAdmin, requirePermission("homepage:write"), announcementController.updateAnnouncement);
+router.delete("/announcements/:id", authenticateAdmin, requirePermission("homepage:write"), announcementController.deleteAnnouncement);
 
 router.get("/homepage-settings", homepageSettingsController.getHomepageSettingsPublic);
 router.get(
@@ -284,37 +315,38 @@ router.get(
 router.put(
   "/admin/homepage-settings",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   homepageSettingsController.updateHomepageSettingsAdmin
 );
 
 router.get("/categories", categoryController.listCategories);
 router.get("/categories/tree", categoryController.treeCategories);
-router.post("/categories", authenticateAdmin, categoryController.createCategory);
-router.put("/categories/:id", authenticateAdmin, categoryController.updateCategory);
-router.delete("/categories/:id", authenticateAdmin, categoryController.deleteCategory);
+router.post("/categories", authenticateAdmin, requirePermission("catalog:write"), categoryController.createCategory);
+router.put("/categories/:id", authenticateAdmin, requirePermission("catalog:write"), categoryController.updateCategory);
+router.delete("/categories/:id", authenticateAdmin, requirePermission("catalog:write"), categoryController.deleteCategory);
 
 router.get("/products", productController.listProducts);
 router.get("/products/:slug", productController.getProductBySlug);
-router.post("/products", authenticateAdmin, productController.createProduct);
-router.put("/products/:id", authenticateAdmin, productController.updateProduct);
-router.delete("/products/:id", authenticateAdmin, productController.deleteProduct);
+router.post("/products", authenticateAdmin, requirePermission("catalog:write"), productController.createProduct);
+router.put("/products/:id", authenticateAdmin, requirePermission("catalog:write"), productController.updateProduct);
+router.delete("/products/:id", authenticateAdmin, requirePermission("catalog:write"), productController.deleteProduct);
 
 router.get("/collections", collectionController.listCollections);
 router.get("/collections/:slug", collectionController.getCollection);
-router.post("/collections", authenticateAdmin, collectionController.createCollection);
-router.put("/collections/:id", authenticateAdmin, collectionController.updateCollection);
-router.delete("/collections/:id", authenticateAdmin, collectionController.deleteCollection);
+router.post("/collections", authenticateAdmin, requirePermission("catalog:write"), collectionController.createCollection);
+router.put("/collections/:id", authenticateAdmin, requirePermission("catalog:write"), collectionController.updateCollection);
+router.delete("/collections/:id", authenticateAdmin, requirePermission("catalog:write"), collectionController.deleteCollection);
 
 router.get("/lookbooks", lookbookController.listLookbooks);
 router.get("/lookbooks/:slug", lookbookController.getLookbook);
-router.post("/lookbooks", authenticateAdmin, lookbookController.createLookbook);
-router.put("/lookbooks/:id", authenticateAdmin, lookbookController.updateLookbook);
-router.delete("/lookbooks/:id", authenticateAdmin, lookbookController.deleteLookbook);
+router.post("/lookbooks", authenticateAdmin, requirePermission("catalog:write"), lookbookController.createLookbook);
+router.put("/lookbooks/:id", authenticateAdmin, requirePermission("catalog:write"), lookbookController.updateLookbook);
+router.delete("/lookbooks/:id", authenticateAdmin, requirePermission("catalog:write"), lookbookController.deleteLookbook);
 
 router.get("/occasions", occasionController.listOccasions);
-router.post("/occasions", authenticateAdmin, occasionController.createOccasion);
-router.put("/occasions/:id", authenticateAdmin, occasionController.updateOccasion);
-router.delete("/occasions/:id", authenticateAdmin, occasionController.deleteOccasion);
+router.post("/occasions", authenticateAdmin, requirePermission("catalog:write"), occasionController.createOccasion);
+router.put("/occasions/:id", authenticateAdmin, requirePermission("catalog:write"), occasionController.updateOccasion);
+router.delete("/occasions/:id", authenticateAdmin, requirePermission("catalog:write"), occasionController.deleteOccasion);
 
 router.get("/homepage-sections", homepageSectionController.publicHomepageSections);
 router.get(
@@ -325,21 +357,25 @@ router.get(
 router.post(
   "/homepage-sections",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   homepageSectionController.createHomepageSection
 );
 router.put(
   "/homepage-sections/reorder",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   homepageSectionController.reorderHomepageSections
 );
 router.put(
   "/homepage-sections/:id",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   homepageSectionController.updateHomepageSection
 );
 router.delete(
   "/homepage-sections/:id",
   authenticateAdmin,
+  requirePermission("homepage:write"),
   homepageSectionController.deleteHomepageSection
 );
 
@@ -347,9 +383,9 @@ router.get("/blogs", blogController.listBlogs);
 router.get("/blogs/:slug", blogController.getBlogBySlug);
 router.get("/admin/blogs", authenticateAdmin, blogController.listBlogsAdmin);
 router.get("/admin/blogs/:id", authenticateAdmin, blogController.getBlogByIdAdmin);
-router.post("/blogs", authenticateAdmin, blogController.createBlog);
-router.put("/blogs/:id", authenticateAdmin, blogController.updateBlog);
-router.delete("/blogs/:id", authenticateAdmin, blogController.deleteBlog);
+router.post("/blogs", authenticateAdmin, requirePermission("blogs:write"), blogController.createBlog);
+router.put("/blogs/:id", authenticateAdmin, requirePermission("blogs:write"), blogController.updateBlog);
+router.delete("/blogs/:id", authenticateAdmin, requirePermission("blogs:write"), blogController.deleteBlog);
 
 router.post("/leads", leadController.submitLead);
 router.get("/admin/leads", authenticateAdmin, leadController.listLeadsAdmin);
@@ -397,3 +433,79 @@ router.post(
     }
   }
 );
+
+// Admins User Management API (super_admin only)
+router.get("/admin/users", authenticateAdmin, requirePermission("admin:manage"), async (req, res, next) => {
+  try {
+    const list = await Admin.find({}, { passwordHash: 0 }).sort({ createdAt: -1 });
+    res.json(list);
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.post("/admin/users", authenticateAdmin, requirePermission("admin:manage"), async (req, res, next) => {
+  try {
+    const { email, password, role, permissions } = req.body as {
+      email?: string;
+      password?: string;
+      role?: string;
+      permissions?: string[];
+    };
+    if (!email || !password) throw new AppError(400, "Email and password required");
+    const existing = await Admin.findOne({ email: email.toLowerCase() });
+    if (existing) throw new AppError(400, "Email already in use");
+    const hash = await hashPassword(password);
+    const user = await Admin.create({
+      email: email.toLowerCase(),
+      passwordHash: hash,
+      role: role || "admin",
+      permissions: permissions || [],
+    });
+    res.json({ success: true, message: "User created", user: { id: user._id, email: user.email, role: user.role } });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.put("/admin/users/:id", authenticateAdmin, requirePermission("admin:manage"), async (req, res, next) => {
+  try {
+    const { email, password, role, permissions } = req.body as {
+      email?: string;
+      password?: string;
+      role?: string;
+      permissions?: string[];
+    };
+    const user = await Admin.findById(req.params.id);
+    if (!user) throw new AppError(404, "User not found");
+    if (email) {
+      const existing = await Admin.findOne({ email: email.toLowerCase(), _id: { $ne: user._id } });
+      if (existing) throw new AppError(400, "Email already in use");
+      user.email = email.toLowerCase();
+    }
+    if (password && String(password).trim() !== "") {
+      user.passwordHash = await hashPassword(password);
+    }
+    if (role) user.role = role as any;
+    if (permissions) user.permissions = permissions;
+    await user.save();
+    res.json({ success: true, message: "User updated" });
+  } catch (e) {
+    next(e);
+  }
+});
+
+router.delete("/admin/users/:id", authenticateAdmin, requirePermission("admin:manage"), async (req, res, next) => {
+  try {
+    const user = await Admin.findById(req.params.id);
+    if (!user) throw new AppError(404, "User not found");
+    const callerId = (req as any).adminId;
+    if (user._id.toString() === callerId) {
+      throw new AppError(400, "Cannot delete your own account");
+    }
+    await user.deleteOne();
+    res.json({ success: true, message: "User deleted" });
+  } catch (e) {
+    next(e);
+  }
+});

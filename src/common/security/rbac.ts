@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../errors/AppError.js";
 
-export type Role = "customer" | "admin" | "super_admin";
+export type Role = "customer" | "admin" | "editor" | "super_admin";
 
 export type Permission =
   | "catalog:read"
@@ -12,10 +12,12 @@ export type Permission =
   | "shipments:write"
   | "homepage:write"
   | "customers:read"
+  | "blogs:write"
   | "admin:manage";
 
 const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   customer: ["catalog:read", "orders:read", "orders:write"],
+  editor: ["catalog:read", "blogs:write"],
   admin: [
     "catalog:read",
     "catalog:write",
@@ -25,6 +27,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "shipments:write",
     "homepage:write",
     "customers:read",
+    "blogs:write",
   ],
   super_admin: [
     "catalog:read",
@@ -35,6 +38,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "shipments:write",
     "homepage:write",
     "customers:read",
+    "blogs:write",
     "admin:manage",
   ],
 };
@@ -43,11 +47,16 @@ export function roleHasPermission(role: Role, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
 }
 
-/** Use after authenticateAdmin — maps admin JWT role to permissions. */
+/** Use after authenticateAdmin — maps admin JWT role/permissions to checks. */
 export function requirePermission(...permissions: Permission[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     const role = ((req as Request & { authRole?: Role }).authRole ?? "admin") as Role;
-    const missing = permissions.filter((p) => !roleHasPermission(role, p));
+    if (role === "super_admin") {
+      next();
+      return;
+    }
+    const userPermissions = ((req as Request & { authPermissions?: string[] }).authPermissions ?? ROLE_PERMISSIONS[role] ?? []) as Permission[];
+    const missing = permissions.filter((p) => !userPermissions.includes(p));
     if (missing.length) {
       next(new AppError(403, "Forbidden"));
       return;

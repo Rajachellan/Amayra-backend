@@ -1,20 +1,32 @@
-import type { NextFunction, Request, Response } from "express";
+import { pinoHttp } from "pino-http";
+import { randomUUID } from "crypto";
+import { IncomingMessage, ServerResponse } from "http";
 import { accessLogger } from "../../config/logger.js";
 
-export function requestLoggerMiddleware(req: Request, res: Response, next: NextFunction): void {
-  const started = Date.now();
-  res.on("finish", () => {
-    accessLogger.info(
-      {
-        method: req.method,
-        path: req.originalUrl,
-        statusCode: res.statusCode,
-        durationMs: Date.now() - started,
-        requestId: (req as Request & { requestId?: string }).requestId,
-        ip: req.ip,
-      },
-      "HTTP request"
-    );
-  });
-  next();
-}
+export const requestLoggerMiddleware = pinoHttp({
+  logger: accessLogger,
+  genReqId: (req: IncomingMessage) => {
+    const reqWithId = req as any;
+    if (reqWithId.requestId) {
+      return reqWithId.requestId;
+    }
+    const incoming = req.headers["x-request-id"];
+    return (Array.isArray(incoming) ? incoming[0] : incoming) || randomUUID();
+  },
+  customProps: () => {
+    return {
+      channel: "access",
+    };
+  },
+  serializers: {
+    req: (req: any) => ({
+      id: req.id,
+      method: req.method,
+      url: req.url,
+      ip: req.remoteAddress,
+    }),
+    res: (res: any) => ({
+      statusCode: res.statusCode,
+    }),
+  },
+});

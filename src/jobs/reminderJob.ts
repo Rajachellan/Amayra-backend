@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import { logger } from "../config/logger.js";
 import { CustomerSavedItems } from "../modules/customer/savedItems.model.js";
 import { Customer } from "../models/Customer.js";
 import {
@@ -24,7 +25,7 @@ export async function runReminderJob(): Promise<void> {
   const cutoff = daysAgo(REMINDER_AFTER_DAYS);
   const resendCutoff = daysAgo(MIN_RESEND_DAYS);
 
-  console.log("[reminderJob] Running at", now.toISOString());
+  logger.info(`[reminderJob] Running at ${now.toISOString()}`);
 
   /* ── 1. Abandoned cart reminders ──────────────────────────────────────── */
   const cartCandidates = await CustomerSavedItems.find({
@@ -36,7 +37,7 @@ export async function runReminderJob(): Promise<void> {
     ],
   }).lean();
 
-  console.log(`[reminderJob] ${cartCandidates.length} cart reminder(s) to send`);
+  logger.info(`[reminderJob] ${cartCandidates.length} cart reminder(s) to send`);
 
   for (const doc of cartCandidates) {
     try {
@@ -65,9 +66,9 @@ export async function runReminderJob(): Promise<void> {
         { $set: { cartReminderSentAt: new Date() } }
       );
 
-      console.log(`[reminderJob] Cart reminder sent → ${customer.email}`);
+      logger.info(`[reminderJob] Cart reminder sent → ${customer.email}`);
     } catch (err) {
-      console.error("[reminderJob] Cart reminder failed for customer", doc.customer, err);
+      logger.error(err, `[reminderJob] Cart reminder failed for customer ${doc.customer}`);
     }
   }
 
@@ -78,7 +79,7 @@ export async function runReminderJob(): Promise<void> {
     $or: [{ wishlistReminderSentAt: null }, { wishlistReminderSentAt: { $lte: resendCutoff } }],
   }).lean();
 
-  console.log(`[reminderJob] ${wishlistCandidates.length} wishlist reminder(s) to send`);
+  logger.info(`[reminderJob] ${wishlistCandidates.length} wishlist reminder(s) to send`);
 
   for (const doc of wishlistCandidates) {
     try {
@@ -106,9 +107,9 @@ export async function runReminderJob(): Promise<void> {
         { $set: { wishlistReminderSentAt: new Date() } }
       );
 
-      console.log(`[reminderJob] Wishlist reminder sent → ${customer.email}`);
+      logger.info(`[reminderJob] Wishlist reminder sent → ${customer.email}`);
     } catch (err) {
-      console.error("[reminderJob] Wishlist reminder failed for customer", doc.customer, err);
+      logger.error(err, `[reminderJob] Wishlist reminder failed for customer ${doc.customer}`);
     }
   }
 }
@@ -120,7 +121,7 @@ export async function runReminderJob(): Promise<void> {
 export function startReminderJob(): void {
   // "30 4 * * *" = 04:30 UTC = 10:00 AM IST every day
   cron.schedule("30 4 * * *", () => {
-    runReminderJob().catch((err) => console.error("[reminderJob] Unexpected error:", err));
+    runReminderJob().catch((err) => logger.error(err, "[reminderJob] Unexpected error"));
   });
-  console.log("[reminderJob] Scheduled — daily at 10:00 AM IST");
+  logger.info("[reminderJob] Scheduled — daily at 10:00 AM IST");
 }

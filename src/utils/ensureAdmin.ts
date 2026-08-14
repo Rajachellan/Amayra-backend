@@ -21,7 +21,7 @@ export async function ensureAdminFromEnv(): Promise<void> {
   await Admin.create({
     email,
     passwordHash: await hashPassword(password),
-    role: "admin",
+    role: "super_admin",
   });
   logger.info("Bootstrap admin ensured from environment");
 }

@@ -3,9 +3,9 @@ import jwt from "jsonwebtoken";
 import { jwtConfig } from "../../config/jwt.js";
 import type { Role } from "../security/rbac.js";
 
-export function signAccessToken(subject: string, role: Role): { token: string; jti: string; expiresIn: string } {
+export function signAccessToken(subject: string, role: Role, permissions: string[] = []): { token: string; jti: string; expiresIn: string } {
   const jti = randomUUID();
-  const token = jwt.sign({ sub: subject, role, jti, typ: "access" }, jwtConfig.secret, {
+  const token = jwt.sign({ sub: subject, role, permissions, jti, typ: "access" }, jwtConfig.secret, {
     expiresIn: jwtConfig.expiresIn as jwt.SignOptions["expiresIn"],
   });
   return { token, jti, expiresIn: jwtConfig.expiresIn };

@@ -5,6 +5,7 @@ const adminSchema = new Schema(
     email: { type: String, required: true, unique: true, lowercase: true },
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ["admin", "editor", "super_admin"], default: "admin" },
+    permissions: { type: [String], default: [] },
   },
   { timestamps: true }
 );

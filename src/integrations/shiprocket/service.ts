@@ -272,3 +272,38 @@ export async function trackByAwb(awbCode: string): Promise<PublicTrackingInfo> {
   });
   return normalizeTrackingResponse(data, awb);
 }
+
+export async function createReturnOrder(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const data = (await srFetch("/v1/external/orders/create/return", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })) as Record<string, unknown>;
+
+  const errs = data.errors ?? data.errors_message;
+  if (errs !== undefined && errs !== null && String(errs).length > 1) {
+    const msg =
+      typeof data.message === "string"
+        ? data.message
+        : typeof errs === "string"
+          ? errs
+          : JSON.stringify(errs);
+    throw new AppError(502, msg);
+  }
+  if (typeof data.status_code === "number" && data.status_code >= 400) {
+    srThrow(data, "Shiprocket create return order failed");
+  }
+  return data;
+}
+
+export async function cancelOrder(srOrderId: string | number): Promise<Record<string, unknown>> {
+  const data = (await srFetch("/v1/external/orders/cancel", {
+    method: "POST",
+    body: JSON.stringify({ ids: [typeof srOrderId === "string" ? Number(srOrderId) : srOrderId] }),
+  })) as Record<string, unknown>;
+
+  if (typeof data.status_code === "number" && data.status_code >= 400) {
+    srThrow(data, "Shiprocket cancel order failed");
+  }
+  return data;
+}
+

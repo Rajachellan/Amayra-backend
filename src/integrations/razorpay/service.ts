@@ -21,3 +21,13 @@ export async function createRazorpayOrder(amountPaise: number, receipt: string, 
   };
   return rzp.orders.create(orderOptions);
 }
+
+export async function createRazorpayRefund(paymentId: string, amountPaise: number, notes?: Record<string, string>) {
+  const rzp = getRazorpay();
+  return (rzp as any).refunds.create({
+    payment_id: paymentId,
+    amount: amountPaise,
+    ...(notes ? { notes } : {}),
+  });
+}
+

@@ -6,3 +6,4 @@ export { corsOptions } from "./cors.js";
 export { cloudflareConfig, isR2Configured } from "./cloudflare.js";
 export { razorpayConfig, isRazorpayConfigured } from "./razorpay.js";
 export { shiprocketConfig, isShiprocketConfigured } from "./shiprocket.js";
+export { initSocketIO, getIO, emitToAdmins } from "./socket.js";

@@ -53,6 +53,7 @@ function verifyRole(req: Request, next: NextFunction, allowed: Role[]): void {
       return;
     }
     (req as Request & { authRole?: Role }).authRole = payload.role as Role;
+    (req as Request & { authPermissions?: string[] }).authPermissions = (payload as any).permissions ?? [];
     if (payload.role === "customer") {
       (req as Request & { customerId?: string }).customerId = payload.sub;
     } else {

@@ -53,11 +53,7 @@ const envSchema = z
       });
     }
     if (!data.RAZORPAY_KEY_ID || !data.RAZORPAY_KEY_SECRET) {
-      ctx.addIssue({
-        code: "custom",
-        message: "RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET required in production",
-        path: ["RAZORPAY_KEY_ID"],
-      });
+      console.warn("⚠️ Warning: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is missing. Razorpay payment processing will be disabled.");
     }
     if (data.JWT_SECRET === "change-me-in-production" || data.JWT_SECRET.length < 32) {
       ctx.addIssue({

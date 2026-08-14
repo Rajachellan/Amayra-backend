@@ -143,8 +143,31 @@ export async function buildOrderDraft(
     }
   }
 
+  // 2. Extra 10% Off for subtotal >= 3499
+  let milestoneDiscount = 0;
+  if (subtotal >= 3499) {
+    milestoneDiscount = Math.round(subtotal * 0.1 * 100) / 100;
+    discount += milestoneDiscount;
+  }
+
+  // 3. Shipping charges: Free above 1499, else 199
+  const shipping = subtotal > 0 && subtotal < 1499 ? 199 : 0;
+
+  // 4. Free Gift for subtotal >= 6999
+  if (subtotal >= 6999) {
+    items.push({
+      product: new mongoose.Types.ObjectId("600000000000000000000799"),
+      name: "Free Gift (Worth ₹799)",
+      slug: "free-gift-worth-799",
+      sku: "GIFT799",
+      unitPrice: 0,
+      quantity: 1,
+      lineTotal: 0,
+      image: "/images/gift-box.webp",
+    });
+  }
+
   const GST = 0;
-  const shipping = 0;
   const { tax, total } = normalizeOrderTotal(subtotal - discount, GST, shipping);
 
   const addr = shippingAddress;
@@ -202,7 +225,21 @@ export async function createPendingOrderFromDraft(args: {
     total: d.total,
     currency: "INR",
     status: "pending_payment",
-    paymentMethod: "online",
+    orderStatus: "PENDING",
+    paymentStatus: "PENDING",
+    shippingStatus: "NOT_CREATED",
+    returnStatus: "NOT_REQUESTED",
+    refundStatus: "NOT_APPLICABLE",
+    paymentMethod: "PREPAID",
+    paymentInfo: {
+      provider: "RAZORPAY",
+      razorpayOrderId: args.razorpayOrderId,
+      status: "PENDING",
+    },
+    shippingInfo: {
+      provider: "SHIPROCKET",
+      status: "NOT_CREATED",
+    },
   });
 
   const amountPaise = Math.round(d.total * 100);
@@ -222,35 +259,7 @@ export async function createPendingOrderFromDraft(args: {
   return { order, payment };
 }
 
-async function decrementStock(
-  session: mongoose.ClientSession | null,
-  orderId: mongoose.Types.ObjectId
-) {
-  const order = await Order.findById(orderId)
-    .session(session ?? null)
-    .exec();
-  if (!order?.items?.length) return;
-  const productAggregates = new Map<string, number>();
-  for (const item of order.items) {
-    const pid = item.product?.toString();
-    if (!pid) continue;
-    productAggregates.set(pid, (productAggregates.get(pid) ?? 0) + item.quantity);
-  }
-  for (const [pid, qty] of productAggregates.entries()) {
-    const result = await Product.updateOne(
-      { _id: pid, stock: { $gte: qty } },
-      {
-        $inc: { stock: -qty, soldCount: qty, trendingScore: qty },
-      }
-    ).session(session ?? null);
-    if (!result.modifiedCount) {
-      throw new AppError(
-        400,
-        "Stock changed during checkout — order could not be fulfilled. Please retry."
-      );
-    }
-  }
-}
+import { processPrepaidPaymentCapture, processPaymentFailure } from "../payment/payment.service.js";
 
 export async function markOrderPaid(args: {
   paymentDocId: mongoose.Types.ObjectId;
@@ -259,70 +268,92 @@ export async function markOrderPaid(args: {
   method?: string;
   appendRaw?: Record<string, unknown>;
 }): Promise<{ alreadyDone: boolean }> {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const paymentBefore = await Payment.findById(args.paymentDocId).session(session);
-    if (!paymentBefore || !paymentBefore.order) {
-      await session.abortTransaction();
-      session.endSession();
-      throw new AppError(404, "Payment not found");
-    }
-    if (paymentBefore.status === "captured") {
-      await session.commitTransaction();
-      session.endSession();
-      return { alreadyDone: true };
-    }
-
-    const orderBefore = await Order.findById(paymentBefore.order).session(session);
-    if (!orderBefore) {
-      await session.abortTransaction();
-      session.endSession();
-      throw new AppError(404, "Order not found");
-    }
-
-    if (paymentBefore.order && orderBefore.status === "paid") {
-      await session.commitTransaction();
-      session.endSession();
-      return { alreadyDone: true };
-    }
-
-    await decrementStock(session, orderBefore._id);
-
-    paymentBefore.status = "captured";
-    if (args.razorpayPaymentId) paymentBefore.razorpayPaymentId = args.razorpayPaymentId;
-    if (args.razorpaySignature !== undefined)
-      paymentBefore.razorpaySignature = args.razorpaySignature ?? undefined;
-    if (args.method) paymentBefore.method = args.method;
-    if (args.appendRaw)
-      paymentBefore.rawPayload = { ...(paymentBefore.rawPayload ?? {}), ...args.appendRaw };
-    await paymentBefore.save({ session });
-
-    orderBefore.status = "paid";
-    await orderBefore.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
-    return { alreadyDone: false };
-  } catch (e) {
-    await session.abortTransaction();
-    session.endSession();
-    throw e;
-  }
+  return processPrepaidPaymentCapture(args);
 }
 
 export async function markPaymentFailed(
   paymentId: mongoose.Types.ObjectId,
   reason?: string,
   appendRaw?: Record<string, unknown>
-) {
-  const payment = await Payment.findById(paymentId);
-  if (!payment) return;
-  if (payment.status === "captured") return;
-  payment.status = "failed";
-  payment.failureReason = reason ?? payment.failureReason;
-  if (appendRaw) payment.rawPayload = { ...(payment.rawPayload ?? {}), ...appendRaw };
-  await payment.save();
-
-  await Order.updateOne({ _id: payment.order }, { status: "failed" });
+): Promise<void> {
+  return processPaymentFailure(paymentId, reason, appendRaw);
 }
+
+export async function createCodOrderFromDraft(args: {
+  customerId: string;
+  draft: Awaited<ReturnType<typeof buildOrderDraft>>;
+  shippingAddress: ShippingAddressInput;
+}) {
+  const cid = new mongoose.Types.ObjectId(args.customerId);
+  const d = args.draft;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const order = await Order.create([{
+      orderNumber: d.orderNumber,
+      customer: cid,
+      items: d.items,
+      shippingAddress: {
+        fullName: args.shippingAddress.fullName.trim(),
+        phone: args.shippingAddress.phone.trim(),
+        line1: args.shippingAddress.line1.trim(),
+        city: args.shippingAddress.city.trim(),
+        state: args.shippingAddress.state.trim(),
+        pincode: args.shippingAddress.pincode.trim(),
+        country: (args.shippingAddress.country ?? "IN").trim() || "IN",
+      },
+      subtotal: d.subtotal,
+      discount: d.discount,
+      couponCode: d.couponCode,
+      tax: d.tax,
+      shipping: d.shipping,
+      total: d.total,
+      currency: "INR",
+      status: "processing", // Legacy: COD starts as processing
+      orderStatus: "CONFIRMED",
+      paymentStatus: "COD_PENDING",
+      shippingStatus: "NOT_CREATED",
+      returnStatus: "NOT_REQUESTED",
+      refundStatus: "NOT_APPLICABLE",
+      paymentMethod: "COD",
+      paymentInfo: {
+        provider: "COD",
+        status: "COD_PENDING",
+        codAmount: d.total,
+      },
+      shippingInfo: {
+        provider: "SHIPROCKET",
+        status: "NOT_CREATED",
+      },
+    }], { session });
+
+    const createdOrder = order[0];
+
+    const { decrementStockForOrder } = await import("../inventory/inventory.service.js");
+    await decrementStockForOrder(session, createdOrder, "CUSTOMER");
+
+    await session.commitTransaction();
+    session.endSession();
+
+    const { recordOrderEvent } = await import("../order/order.service.js");
+    await recordOrderEvent({
+      orderId: createdOrder._id,
+      eventType: "ORDER_CREATED",
+      previousStatus: undefined,
+      newStatus: "CONFIRMED",
+      source: "CUSTOMER",
+      metadata: {
+        paymentMethod: "COD",
+      },
+    });
+
+    return createdOrder;
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+}
+
+

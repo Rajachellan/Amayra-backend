@@ -20,14 +20,16 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
       throw new AppError(401, "Invalid credentials");
     }
 
-    const role = admin.role === "super_admin" ? "super_admin" : "admin";
-    const { token } = signAccessToken(admin._id.toString(), role);
-    const { token: refreshToken } = signRefreshToken(admin._id.toString(), role);
+    const role = admin.role === "super_admin" ? "super_admin" : (admin.role ?? "admin");
+    const permissions = admin.permissions ?? [];
+    const { token } = signAccessToken(admin._id.toString(), role as any, permissions);
+    const { token: refreshToken } = signRefreshToken(admin._id.toString(), role as any);
 
     const adminPayload = {
       id: admin._id.toString(),
       email: admin.email,
       role: admin.role,
+      permissions,
     };
 
     logSecurityEvent("admin_login_success", { adminId: adminPayload.id, ip: req.ip });
