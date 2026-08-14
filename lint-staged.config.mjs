@@ -5,5 +5,5 @@
  *   npm run typecheck
  */
 export default {
-  "src/**/*.{ts,js,json}": "prettier --write",
+  "src/**/*.{ts,js,json}": "prettier --write --ignore-unknown",
 };
