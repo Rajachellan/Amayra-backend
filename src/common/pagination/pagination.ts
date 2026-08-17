@@ -13,7 +13,11 @@ export type PaginationMeta = {
   hasPrevPage: boolean;
 };
 
-export function normalizePagination(input: PaginationInput): { page: number; limit: number; skip: number } {
+export function normalizePagination(input: PaginationInput): {
+  page: number;
+  limit: number;
+  skip: number;
+} {
   const maxLimit = input.maxLimit ?? 100;
   const page = Math.max(1, Number(input.page) || 1);
   const limit = Math.min(maxLimit, Math.max(1, Number(input.limit) || 20));

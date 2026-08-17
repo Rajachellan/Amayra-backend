@@ -166,7 +166,7 @@ const orderSchema = new Schema(
     shipping: { type: Number, required: true, default: 0 },
     total: { type: Number, required: true },
     currency: { type: String, default: "INR" },
-    
+
     // Domain Specific statuses
     orderStatus: {
       type: String,

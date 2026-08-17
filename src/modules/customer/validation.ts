@@ -15,7 +15,8 @@ export const IN_PHONE_RE = /^(?:\+?91[\s-]?|0)?[6-9]\d{9}$/;
 export const IN_PINCODE_RE = /^[1-9][0-9]{5}$/;
 
 /** City / state: letters, spaces, hyphen, apostrophe */
-export const PLACE_NAME_RE = /^(?=.{2,60}$)[\p{L}][\p{L}\p{M}'’.\-]*(?: [\p{L}][\p{L}\p{M}'’.\-]*)*$/u;
+export const PLACE_NAME_RE =
+  /^(?=.{2,60}$)[\p{L}][\p{L}\p{M}'’.\-]*(?: [\p{L}][\p{L}\p{M}'’.\-]*)*$/u;
 
 /** Street line: printable, no control chars */
 export const ADDRESS_LINE_RE = /^(?=.{3,120}$)[^\p{Cc}\p{Cf}]+$/u;

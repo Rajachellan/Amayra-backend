@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
-import { Collection } from '../../models/Collection.js';
-import { AppError } from '../../utils/AppError.js';
-import { toSlug } from '../../utils/slug.js';
+import { Collection } from "../../models/Collection.js";
+import { AppError } from "../../utils/AppError.js";
+import { toSlug } from "../../utils/slug.js";
 
 export async function createCollection(
   req: Request,

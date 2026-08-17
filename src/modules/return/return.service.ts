@@ -39,7 +39,7 @@ export async function createReturnRequest(args: {
 }): Promise<any> {
   const order = await Order.findById(args.orderId);
   if (!order) throw new AppError(404, "Order not found");
-  
+
   if (order.customer.toString() !== args.customerId) {
     throw new AppError(403, "You do not own this order");
   }
@@ -142,7 +142,7 @@ export async function approveReturn(returnId: string, _adminId: string): Promise
   // Initiate reverse pickup booking with Shiprocket
   const cust = order.customer as any;
   const customerEmail = cust?.email?.trim() || "customer@mairiijewels.com";
-  
+
   const returnDate = new Date(returnDoc.createdAt).toISOString().slice(0, 10);
   const itemsPayload = returnDoc.items.map((it, idx) => ({
     name: it.name.slice(0, 200),
@@ -206,7 +206,10 @@ export async function approveReturn(returnId: string, _adminId: string): Promise
       };
     }
   } catch (err: any) {
-    logger.error({ err }, "Failed booking reverse pickup with Shiprocket. Approving anyway without AWB.");
+    logger.error(
+      { err },
+      "Failed booking reverse pickup with Shiprocket. Approving anyway without AWB."
+    );
   }
 
   // Update return document
@@ -364,7 +367,8 @@ export async function inspectReturn(
     // Broadcast Socket.IO and history updates
     await recordOrderEvent({
       orderId: order._id,
-      eventType: args.result === "ACCEPTED" ? "RETURN_ACCEPTED" : "RETURN_REJECTED_AFTER_INSPECTION",
+      eventType:
+        args.result === "ACCEPTED" ? "RETURN_ACCEPTED" : "RETURN_REJECTED_AFTER_INSPECTION",
       previousStatus: prevOrderReturnStatus,
       newStatus: order.returnStatus,
       source: "ADMIN",
@@ -452,7 +456,6 @@ export async function refundReturn(
         amount: refInfo.refundAmount,
       },
     });
-
   } else {
     // COD Refund Flow
     const method = args?.refundMethod || "BANK";

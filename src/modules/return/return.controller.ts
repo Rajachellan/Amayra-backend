@@ -43,7 +43,11 @@ export async function postCreateReturnRequest(
 /**
  * List returns. Admin sees all, customer sees only their own.
  */
-export async function getReturnList(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getReturnList(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const adminId = (req as any).adminId;
     const customerId = (req as any).customerId;
@@ -68,7 +72,11 @@ export async function getReturnList(req: Request, res: Response, next: NextFunct
 /**
  * Get return details by ID.
  */
-export async function getReturnById(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getReturnById(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { id } = req.params;
     const adminId = (req as any).adminId;
@@ -174,7 +182,11 @@ export async function postInspectReturn(
       throw new AppError(400, "condition and result are required");
     }
 
-    const returnDoc = await returnService.inspectReturn(id, { condition, result, comment }, adminId);
+    const returnDoc = await returnService.inspectReturn(
+      id,
+      { condition, result, comment },
+      adminId
+    );
     res.json(returnDoc);
   } catch (e) {
     next(e);

@@ -11,7 +11,13 @@ import { OrderHistory } from "./../modules/order/order-history.model.js";
 import { buildOrderDraft, createPendingOrderFromDraft } from "../modules/checkout/service.js";
 import { processPrepaidPaymentCapture } from "../modules/payment/payment.service.js";
 import { createCodOrderFromDraft } from "../modules/checkout/service.js";
-import { approveReturn, createReturnRequest, receiveReturn, inspectReturn, refundReturn } from "../modules/return/return.service.js";
+import {
+  approveReturn,
+  createReturnRequest,
+  receiveReturn,
+  inspectReturn,
+  refundReturn,
+} from "../modules/return/return.service.js";
 import { processShiprocketTrackingUpdate } from "../modules/shipping/shipping.service.js";
 import { logger } from "../config/logger.js";
 
@@ -20,7 +26,9 @@ async function verifyAll() {
   // Reference Customer to force registration
   const customerName = Customer.modelName;
   await connectDatabase();
-  logger.info(`Registered models: ${mongoose.modelNames().join(", ")}, customerModel: ${customerName}`);
+  logger.info(
+    `Registered models: ${mongoose.modelNames().join(", ")}, customerModel: ${customerName}`
+  );
 
   // Create a clean dummy product for testing
   const dummyProduct = await Product.create({
@@ -152,10 +160,7 @@ async function verifyAll() {
   });
 
   const deliveredCod = await Order.findById(codOrder._id);
-  if (
-    deliveredCod?.orderStatus !== "DELIVERED" ||
-    deliveredCod.paymentStatus !== "COD_COLLECTED"
-  ) {
+  if (deliveredCod?.orderStatus !== "DELIVERED" || deliveredCod.paymentStatus !== "COD_COLLECTED") {
     throw new Error(
       `COD delivery status transition incorrect: ${deliveredCod?.orderStatus}, paymentStatus: ${deliveredCod?.paymentStatus}`
     );
@@ -178,7 +183,7 @@ async function verifyAll() {
 
   // Approve Return
   await approveReturn(returnDoc._id.toString(), new mongoose.Types.ObjectId().toString());
-  
+
   // Receive Return
   await receiveReturn(returnDoc._id.toString(), new mongoose.Types.ObjectId().toString());
 
@@ -196,7 +201,9 @@ async function verifyAll() {
   // Verify stock incremented
   const productAfterRestock = await Product.findById(dummyProduct._id);
   if (!productAfterRestock || productAfterRestock.stock !== 16) {
-    throw new Error(`Expected available stock to be 16 after restock, got: ${productAfterRestock?.stock}`);
+    throw new Error(
+      `Expected available stock to be 16 after restock, got: ${productAfterRestock?.stock}`
+    );
   }
 
   // Verify return restocking ledger entry
@@ -227,7 +234,9 @@ async function verifyAll() {
   await Order.deleteMany({ _id: { $in: [prepaidOrder._id, codOrder._id] } });
   await Payment.deleteMany({ order: { $in: [prepaidOrder._id, codOrder._id] } });
   await Return.deleteOne({ _id: returnDoc._id });
-  await InventoryLedger.deleteMany({ referenceId: { $in: [prepaidOrder._id, codOrder._id, returnDoc._id] } });
+  await InventoryLedger.deleteMany({
+    referenceId: { $in: [prepaidOrder._id, codOrder._id, returnDoc._id] },
+  });
   await OrderHistory.deleteMany({ orderId: { $in: [prepaidOrder._id, codOrder._id] } });
 
   logger.info("\n=== ALL LIFECYCLE WORKFLOWS VERIFIED SUCCESSFULLY ===");

@@ -10,9 +10,17 @@ export async function ensureAdminFromEnv(): Promise<void> {
 
   const existing = await Admin.findOne({ email });
   if (existing) {
+    let updated = false;
     const matches = await verifyPassword(password, existing.passwordHash);
     if (!matches) {
       existing.passwordHash = await hashPassword(password);
+      updated = true;
+    }
+    if (existing.role !== "super_admin") {
+      existing.role = "super_admin" as any;
+      updated = true;
+    }
+    if (updated) {
       await existing.save();
     }
     return;

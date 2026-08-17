@@ -18,8 +18,9 @@ export async function recordOrderEvent(args: {
   metadata?: Record<string, any>;
 }): Promise<void> {
   try {
-    const oid = typeof args.orderId === "string" ? new mongoose.Types.ObjectId(args.orderId) : args.orderId;
-    
+    const oid =
+      typeof args.orderId === "string" ? new mongoose.Types.ObjectId(args.orderId) : args.orderId;
+
     // Write to audit log in MongoDB
     await OrderHistory.create({
       orderId: oid,
@@ -64,7 +65,11 @@ export async function recordOrderEvent(args: {
       }
     }
 
-    if (args.eventType.startsWith("SHIPMENT_") || args.eventType.startsWith("AWB_") || args.eventType.startsWith("PICKUP_")) {
+    if (
+      args.eventType.startsWith("SHIPMENT_") ||
+      args.eventType.startsWith("AWB_") ||
+      args.eventType.startsWith("PICKUP_")
+    ) {
       emitToAdmins("shipment.updated", payload);
       if (args.eventType === "SHIPMENT_DELIVERED") {
         emitToAdmins("shipment.delivered", payload);

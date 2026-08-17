@@ -1,7 +1,14 @@
-import { AppError } from '../../utils/AppError.js';
-import { getShiprocketBearerToken, getShiprocketBaseUrl, invalidateShiprocketToken } from "./auth.js";
+import { AppError } from "../../utils/AppError.js";
+import {
+  getShiprocketBearerToken,
+  getShiprocketBaseUrl,
+  invalidateShiprocketToken,
+} from "./auth.js";
 
-async function srFetch(path: string, init: RequestInit & { retriesWithFreshToken?: boolean } = {}): Promise<unknown> {
+async function srFetch(
+  path: string,
+  init: RequestInit & { retriesWithFreshToken?: boolean } = {}
+): Promise<unknown> {
   const base = getShiprocketBaseUrl();
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const { retriesWithFreshToken, ...restInit } = init;
@@ -97,7 +104,12 @@ export async function listPickupLocations(): Promise<NormalizedPickup[]> {
         nickname: nickname.trim(),
         pinCode: pin.trim(),
         city: typeof o.city === "string" ? o.city : undefined,
-        phone: typeof o.phone === "string" ? o.phone : typeof o.phone === "number" ? String(o.phone) : undefined,
+        phone:
+          typeof o.phone === "string"
+            ? o.phone
+            : typeof o.phone === "number"
+              ? String(o.phone)
+              : undefined,
       });
     }
   }
@@ -125,7 +137,9 @@ export async function courierServiceability(args: {
 
 export type AdhocOrderPayload = Record<string, unknown>;
 
-export async function createAdhocOrder(payload: AdhocOrderPayload): Promise<Record<string, unknown>> {
+export async function createAdhocOrder(
+  payload: AdhocOrderPayload
+): Promise<Record<string, unknown>> {
   const data = (await srFetch("/v1/external/orders/create/adhoc", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -147,7 +161,10 @@ export async function createAdhocOrder(payload: AdhocOrderPayload): Promise<Reco
   return data;
 }
 
-export async function assignAwb(shipmentId: number | string, courierId: number): Promise<Record<string, unknown>> {
+export async function assignAwb(
+  shipmentId: number | string,
+  courierId: number
+): Promise<Record<string, unknown>> {
   const data = (await srFetch("/v1/external/courier/assign/awb", {
     method: "POST",
     body: JSON.stringify({
@@ -219,8 +236,12 @@ export type PublicTrackingInfo = {
 export function normalizeTrackingResponse(data: unknown, awbCode: string): PublicTrackingInfo {
   const root = data as Record<string, unknown>;
   const td = (root.tracking_data ?? root.data ?? root) as Record<string, unknown>;
-  const track = Array.isArray(td.shipment_track) ? (td.shipment_track[0] as Record<string, unknown>) : undefined;
-  const activitiesRaw = Array.isArray(td.shipment_track_activities) ? td.shipment_track_activities : [];
+  const track = Array.isArray(td.shipment_track)
+    ? (td.shipment_track[0] as Record<string, unknown>)
+    : undefined;
+  const activitiesRaw = Array.isArray(td.shipment_track_activities)
+    ? td.shipment_track_activities
+    : [];
 
   const activities: PublicTrackingActivity[] = activitiesRaw
     .filter((a) => a && typeof a === "object")
@@ -273,7 +294,9 @@ export async function trackByAwb(awbCode: string): Promise<PublicTrackingInfo> {
   return normalizeTrackingResponse(data, awb);
 }
 
-export async function createReturnOrder(payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function createReturnOrder(
+  payload: Record<string, unknown>
+): Promise<Record<string, unknown>> {
   const data = (await srFetch("/v1/external/orders/create/return", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -306,4 +329,3 @@ export async function cancelOrder(srOrderId: string | number): Promise<Record<st
   }
   return data;
 }
-

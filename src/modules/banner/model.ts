@@ -1,5 +1,5 @@
 import mongoose, { Schema, type InferSchemaType } from "mongoose";
-import { mediaAssetSchema } from '../../utils/mediaAsset.js';
+import { mediaAssetSchema } from "../../utils/mediaAsset.js";
 
 const bannerSchema = new Schema(
   {

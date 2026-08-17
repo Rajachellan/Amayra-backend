@@ -41,5 +41,7 @@ export const cloudflareConfig = {
 
 export function isR2Configured(): boolean {
   const { r2 } = cloudflareConfig;
-  return Boolean(r2.s3Endpoint && r2.accessKeyId && r2.secretAccessKey && r2.bucketName && r2.publicBaseUrl);
+  return Boolean(
+    r2.s3Endpoint && r2.accessKeyId && r2.secretAccessKey && r2.bucketName && r2.publicBaseUrl
+  );
 }

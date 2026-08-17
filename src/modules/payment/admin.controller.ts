@@ -1,9 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
-import { Payment } from '../../models/Payment.js';
-import { PAYMENT_STATUSES } from '../../models/Payment.js';
-import { AppError } from '../../utils/AppError.js';
+import { Payment } from "../../models/Payment.js";
+import { PAYMENT_STATUSES } from "../../models/Payment.js";
+import { AppError } from "../../utils/AppError.js";
 
-export async function listPaymentsAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listPaymentsAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
@@ -38,7 +42,11 @@ export async function listPaymentsAdmin(req: Request, res: Response, next: NextF
   }
 }
 
-export async function getPaymentAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getPaymentAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { id } = req.params;
     const payment = await Payment.findById(id)

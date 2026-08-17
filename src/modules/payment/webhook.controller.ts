@@ -52,7 +52,9 @@ export async function postRazorpayWebhook(req: Request, res: Response): Promise<
 
   const ev = parsed.event || "";
   const eventIdHeader = req.headers["x-razorpay-event-id"];
-  const eventId = (typeof eventIdHeader === "string" ? eventIdHeader : parsed.event_id || "").trim();
+  const eventId = (
+    typeof eventIdHeader === "string" ? eventIdHeader : parsed.event_id || ""
+  ).trim();
 
   if (!eventId) {
     res.status(400).send("Missing Razorpay event ID");
@@ -69,8 +71,7 @@ export async function postRazorpayWebhook(req: Request, res: Response): Promise<
   try {
     if (ev === "payment.captured" || ev === "order.paid") {
       const entity = parsed.payload?.payment?.entity as
-        | { order_id?: string; id?: string; method?: string }
-        | undefined;
+        { order_id?: string; id?: string; method?: string } | undefined;
       const rzOrderId = entity?.order_id;
       const rzPaymentId = entity?.id;
       const method = entity?.method;
@@ -101,7 +102,8 @@ export async function postRazorpayWebhook(req: Request, res: Response): Promise<
     }
 
     if (ev === "payment.failed") {
-      const entity = parsed.payload?.payment?.entity as { order_id?: string; error_reason?: string } | undefined;
+      const entity = parsed.payload?.payment?.entity as
+        { order_id?: string; error_reason?: string } | undefined;
       const rzOrderId = entity?.order_id;
       const reason = entity?.error_reason;
 

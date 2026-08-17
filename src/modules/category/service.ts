@@ -1,5 +1,5 @@
 import type { Types } from "mongoose";
-import { Category, type CategoryDoc } from '../../models/Category.js';
+import { Category, type CategoryDoc } from "../../models/Category.js";
 
 export type CategoryTreeNode = {
   _id: string;
@@ -44,6 +44,10 @@ export async function getCategoryTree(onlyActive = true): Promise<CategoryTreeNo
 }
 
 export async function resolveCategoryIdBySlug(slug: string): Promise<Types.ObjectId | null> {
-  const c = await Category.findOne({ slug, active: true, status: { $in: ["published", null] } }).select("_id");
+  const c = await Category.findOne({
+    slug,
+    active: true,
+    status: { $in: ["published", null] },
+  }).select("_id");
   return c?._id ?? null;
 }

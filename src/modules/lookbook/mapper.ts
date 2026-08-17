@@ -38,9 +38,7 @@ export function summarizeLookbook(doc: Record<string, unknown>) {
   let hotspotsCount = 0;
   for (const img of gallery) hotspotsCount += img.hotspots?.length ?? 0;
 
-  const status =
-    (doc.status as string) ||
-    (doc.active === false ? "draft" : "published");
+  const status = (doc.status as string) || (doc.active === false ? "draft" : "published");
 
   return {
     ...doc,

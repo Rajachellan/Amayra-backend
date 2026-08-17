@@ -20,7 +20,11 @@ const envSchema = z
     ADMIN_EMAIL: z.string().email().optional(),
     ADMIN_PASSWORD: z.string().min(8).optional(),
     UPLOAD_STORAGE: z.string().optional(),
-    UPLOAD_MAX_BYTES: z.coerce.number().int().positive().default(8 * 1024 * 1024),
+    UPLOAD_MAX_BYTES: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(8 * 1024 * 1024),
     R2_PUBLIC_BASE_URL: z.string().optional(),
     R2_BUCKET_NAME: z.string().optional(),
     R2_ACCESS_KEY_ID: z.string().optional(),
@@ -40,7 +44,11 @@ const envSchema = z
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error", "fatal", "trace"]).default("info"),
-    RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+    RATE_LIMIT_WINDOW_MS: z.coerce
+      .number()
+      .int()
+      .positive()
+      .default(15 * 60 * 1000),
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(1000),
   })
   .superRefine((data, ctx) => {
@@ -53,7 +61,9 @@ const envSchema = z
       });
     }
     if (!data.RAZORPAY_KEY_ID || !data.RAZORPAY_KEY_SECRET) {
-      console.warn("⚠️ Warning: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is missing. Razorpay payment processing will be disabled.");
+      console.warn(
+        "⚠️ Warning: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET is missing. Razorpay payment processing will be disabled."
+      );
     }
     if (data.JWT_SECRET === "change-me-in-production" || data.JWT_SECRET.length < 32) {
       ctx.addIssue({

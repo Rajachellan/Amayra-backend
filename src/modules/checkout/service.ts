@@ -290,43 +290,48 @@ export async function createCodOrderFromDraft(args: {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const order = await Order.create([{
-      orderNumber: d.orderNumber,
-      customer: cid,
-      items: d.items,
-      shippingAddress: {
-        fullName: args.shippingAddress.fullName.trim(),
-        phone: args.shippingAddress.phone.trim(),
-        line1: args.shippingAddress.line1.trim(),
-        city: args.shippingAddress.city.trim(),
-        state: args.shippingAddress.state.trim(),
-        pincode: args.shippingAddress.pincode.trim(),
-        country: (args.shippingAddress.country ?? "IN").trim() || "IN",
-      },
-      subtotal: d.subtotal,
-      discount: d.discount,
-      couponCode: d.couponCode,
-      tax: d.tax,
-      shipping: d.shipping,
-      total: d.total,
-      currency: "INR",
-      status: "processing", // Legacy: COD starts as processing
-      orderStatus: "CONFIRMED",
-      paymentStatus: "COD_PENDING",
-      shippingStatus: "NOT_CREATED",
-      returnStatus: "NOT_REQUESTED",
-      refundStatus: "NOT_APPLICABLE",
-      paymentMethod: "COD",
-      paymentInfo: {
-        provider: "COD",
-        status: "COD_PENDING",
-        codAmount: d.total,
-      },
-      shippingInfo: {
-        provider: "SHIPROCKET",
-        status: "NOT_CREATED",
-      },
-    }], { session });
+    const order = await Order.create(
+      [
+        {
+          orderNumber: d.orderNumber,
+          customer: cid,
+          items: d.items,
+          shippingAddress: {
+            fullName: args.shippingAddress.fullName.trim(),
+            phone: args.shippingAddress.phone.trim(),
+            line1: args.shippingAddress.line1.trim(),
+            city: args.shippingAddress.city.trim(),
+            state: args.shippingAddress.state.trim(),
+            pincode: args.shippingAddress.pincode.trim(),
+            country: (args.shippingAddress.country ?? "IN").trim() || "IN",
+          },
+          subtotal: d.subtotal,
+          discount: d.discount,
+          couponCode: d.couponCode,
+          tax: d.tax,
+          shipping: d.shipping,
+          total: d.total,
+          currency: "INR",
+          status: "processing", // Legacy: COD starts as processing
+          orderStatus: "CONFIRMED",
+          paymentStatus: "COD_PENDING",
+          shippingStatus: "NOT_CREATED",
+          returnStatus: "NOT_REQUESTED",
+          refundStatus: "NOT_APPLICABLE",
+          paymentMethod: "COD",
+          paymentInfo: {
+            provider: "COD",
+            status: "COD_PENDING",
+            codAmount: d.total,
+          },
+          shippingInfo: {
+            provider: "SHIPROCKET",
+            status: "NOT_CREATED",
+          },
+        },
+      ],
+      { session }
+    );
 
     const createdOrder = order[0];
 
@@ -355,5 +360,3 @@ export async function createCodOrderFromDraft(args: {
     throw err;
   }
 }
-
-

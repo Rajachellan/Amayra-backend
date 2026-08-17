@@ -1,9 +1,13 @@
 import type { Request, Response, NextFunction } from "express";
-import { Order, ORDER_STATUSES } from '../../models/Order.js';
-import { AppError } from '../../utils/AppError.js';
-import { mergeOrderListFilter } from '../../utils/orderListVisibility.js';
+import { Order, ORDER_STATUSES } from "../../models/Order.js";
+import { AppError } from "../../utils/AppError.js";
+import { mergeOrderListFilter } from "../../utils/orderListVisibility.js";
 
-export async function listOrdersAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listOrdersAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
@@ -39,7 +43,11 @@ export async function listOrdersAdmin(req: Request, res: Response, next: NextFun
   }
 }
 
-export async function getOrderAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getOrderAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { id } = req.params;
     const order = await Order.findById(id)
@@ -53,7 +61,11 @@ export async function getOrderAdmin(req: Request, res: Response, next: NextFunct
   }
 }
 
-export async function putOrderAdminStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function putOrderAdminStatus(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { id } = req.params;
     const { status } = req.body as { status?: string };
@@ -96,7 +108,11 @@ export async function putOrderAdminStatus(req: Request, res: Response, next: Nex
 
 import { OrderHistory } from "./order-history.model.js";
 
-export async function getOrderHistory(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getOrderHistory(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { id } = req.params;
     const history = await OrderHistory.find({ orderId: id }).sort({ createdAt: -1 });
@@ -105,4 +121,3 @@ export async function getOrderHistory(req: Request, res: Response, next: NextFun
     next(e);
   }
 }
-

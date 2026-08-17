@@ -13,7 +13,11 @@ function zodFail(err: z.ZodError): never {
   throw new AppError(400, err.issues.map((i) => i.message).join("; "));
 }
 
-export async function createLookbook(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function createLookbook(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const parsed = lookbookBodySchema.safeParse(req.body);
     if (!parsed.success) zodFail(parsed.error);
@@ -24,7 +28,11 @@ export async function createLookbook(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function listLookbooks(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listLookbooks(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const list = await lookbookService.listLookbooksPublic(
       typeof req.query.featured === "string" ? req.query.featured : undefined
@@ -35,7 +43,11 @@ export async function listLookbooks(req: Request, res: Response, next: NextFunct
   }
 }
 
-export async function listLookbooksAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listLookbooksAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const parsed = adminListQuerySchema.safeParse(req.query);
     if (!parsed.success) zodFail(parsed.error);
@@ -61,7 +73,11 @@ export async function getLookbook(req: Request, res: Response, next: NextFunctio
   }
 }
 
-export async function getLookbookByIdAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getLookbookByIdAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const doc = await lookbookService.getLookbookById(String(req.params.id));
     res.json(doc);
@@ -70,18 +86,32 @@ export async function getLookbookByIdAdmin(req: Request, res: Response, next: Ne
   }
 }
 
-export async function updateLookbook(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function updateLookbook(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
-    const parsed = lookbookBodySchema.partial().extend({ title: z.string().min(2).max(160).optional() }).safeParse(req.body);
+    const parsed = lookbookBodySchema
+      .partial()
+      .extend({ title: z.string().min(2).max(160).optional() })
+      .safeParse(req.body);
     if (!parsed.success) zodFail(parsed.error);
-    const doc = await lookbookService.updateLookbookDoc(String(req.params.id), parsed.data as never);
+    const doc = await lookbookService.updateLookbookDoc(
+      String(req.params.id),
+      parsed.data as never
+    );
     res.json(doc);
   } catch (e) {
     next(e);
   }
 }
 
-export async function deleteLookbook(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function deleteLookbook(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     res.json(await lookbookService.deleteLookbookDoc(String(req.params.id)));
   } catch (e) {
@@ -89,7 +119,11 @@ export async function deleteLookbook(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function addLookbookImage(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function addLookbookImage(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const parsed = lookbookImageSchema.safeParse(req.body);
     if (!parsed.success) zodFail(parsed.error);
@@ -100,7 +134,11 @@ export async function addLookbookImage(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function deleteLookbookImage(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function deleteLookbookImage(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const doc = await lookbookService.deleteLookbookImage(
       String(req.params.id),
@@ -112,7 +150,11 @@ export async function deleteLookbookImage(req: Request, res: Response, next: Nex
   }
 }
 
-export async function reorderLookbookImages(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function reorderLookbookImages(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const ids = (req.body as { imageIds?: string[] }).imageIds;
     if (!Array.isArray(ids)) throw new AppError(400, "imageIds required");
@@ -123,7 +165,11 @@ export async function reorderLookbookImages(req: Request, res: Response, next: N
   }
 }
 
-export async function addLookbookHotspot(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function addLookbookHotspot(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const imageId = String(req.body?.imageId ?? req.params.imageId ?? "");
     if (!imageId) throw new AppError(400, "imageId required");
@@ -136,7 +182,11 @@ export async function addLookbookHotspot(req: Request, res: Response, next: Next
   }
 }
 
-export async function updateLookbookHotspot(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function updateLookbookHotspot(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const imageId = String(req.body?.imageId ?? req.params.imageId ?? "");
     if (!imageId) throw new AppError(400, "imageId required");
@@ -154,7 +204,11 @@ export async function updateLookbookHotspot(req: Request, res: Response, next: N
   }
 }
 
-export async function deleteLookbookHotspot(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function deleteLookbookHotspot(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const imageId = String(req.query.imageId ?? req.body?.imageId ?? "");
     if (!imageId) throw new AppError(400, "imageId required");
@@ -169,7 +223,11 @@ export async function deleteLookbookHotspot(req: Request, res: Response, next: N
   }
 }
 
-export async function duplicateLookbook(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function duplicateLookbook(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const doc = await lookbookService.duplicateLookbook(String(req.params.id));
     res.status(201).json(doc);

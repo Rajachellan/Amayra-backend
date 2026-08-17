@@ -49,9 +49,7 @@ export function createApp() {
           }
         : false,
       frameguard: { action: "deny" },
-      hsts: isProduction
-        ? { maxAge: 31536000, includeSubDomains: true, preload: true }
-        : false,
+      hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
       noSniff: true,
       referrerPolicy: { policy: "strict-origin-when-cross-origin" },
       crossOriginEmbedderPolicy: false,
@@ -106,11 +104,14 @@ export function createApp() {
   app.use(sanitizeInputMiddleware);
   app.use(requestLoggerMiddleware);
 
-  app.use("/uploads", express.static(path.join(process.cwd(), "uploads"), {
-    dotfiles: "deny",
-    index: false,
-    maxAge: isProduction ? "1d" : 0,
-  }));
+  app.use(
+    "/uploads",
+    express.static(path.join(process.cwd(), "uploads"), {
+      dotfiles: "deny",
+      index: false,
+      maxAge: isProduction ? "1d" : 0,
+    })
+  );
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true });

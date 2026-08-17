@@ -5,7 +5,14 @@ import { Collection } from "../models/Collection.js";
 import { Occasion } from "../models/Occasion.js";
 import { Blog } from "../models/Blog.js";
 
-export const LINK_TYPES = ["product", "category", "collection", "occasion", "blog", "custom"] as const;
+export const LINK_TYPES = [
+  "product",
+  "category",
+  "collection",
+  "occasion",
+  "blog",
+  "custom",
+] as const;
 export type LinkType = (typeof LINK_TYPES)[number];
 
 type LinkSource = {
@@ -54,7 +61,9 @@ export function publishedBannerFilter(now = new Date()) {
     active: true,
     $or: [{ status: "published" }, { status: { $exists: false } }, { status: null }],
     $and: [
-      { $or: [{ startDate: null }, { startDate: { $exists: false } }, { startDate: { $lte: now } }] },
+      {
+        $or: [{ startDate: null }, { startDate: { $exists: false } }, { startDate: { $lte: now } }],
+      },
       { $or: [{ endDate: null }, { endDate: { $exists: false } }, { endDate: { $gte: now } }] },
     ],
   };

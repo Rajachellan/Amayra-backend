@@ -46,10 +46,7 @@ export async function decrementStockForOrder(
     ).session(session);
 
     if (!result.modifiedCount) {
-      throw new AppError(
-        400,
-        `Stock changed during checkout for ${product.name} — please retry.`
-      );
+      throw new AppError(400, `Stock changed during checkout for ${product.name} — please retry.`);
     }
 
     // Write to InventoryLedger
@@ -69,9 +66,7 @@ export async function decrementStockForOrder(
       { session }
     );
 
-    logger.info(
-      `Inventory Sale logged: Product [${pid}] (${previousStock} -> ${newStock})`
-    );
+    logger.info(`Inventory Sale logged: Product [${pid}] (${previousStock} -> ${newStock})`);
   }
 }
 
@@ -209,8 +204,6 @@ export async function restockRTOItems(
       { session }
     );
 
-    logger.info(
-      `Inventory RTO Restock logged: Product [${pid}] (${previousStock} -> ${newStock})`
-    );
+    logger.info(`Inventory RTO Restock logged: Product [${pid}] (${previousStock} -> ${newStock})`);
   }
 }

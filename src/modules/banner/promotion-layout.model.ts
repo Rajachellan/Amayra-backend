@@ -46,8 +46,14 @@ const promotionLayoutSchema = new Schema(
     autoHeight: { type: Boolean, default: true },
     equalHeight: { type: Boolean, default: true },
     responsive: {
-      desktop: { type: breakpointSchema, default: () => ({ columns: 3, gap: 16, cardSize: "auto" }) },
-      tablet: { type: breakpointSchema, default: () => ({ columns: 2, gap: 12, cardSize: "auto" }) },
+      desktop: {
+        type: breakpointSchema,
+        default: () => ({ columns: 3, gap: 16, cardSize: "auto" }),
+      },
+      tablet: {
+        type: breakpointSchema,
+        default: () => ({ columns: 2, gap: 12, cardSize: "auto" }),
+      },
       mobile: {
         type: breakpointSchema,
         default: () => ({ columns: 1, gap: 12, cardSize: "auto", stackOrder: "normal" }),

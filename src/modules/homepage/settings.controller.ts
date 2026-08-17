@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import { getOrCreateHomepageSettings } from '../../models/HomepageSettings.js';
+import { getOrCreateHomepageSettings } from "../../models/HomepageSettings.js";
 
 const PUBLIC_FIELDS = [
   "showBanner",
@@ -25,7 +25,11 @@ function toPublic(doc: {
   };
 }
 
-export async function getHomepageSettingsPublic(_req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getHomepageSettingsPublic(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const doc = await getOrCreateHomepageSettings();
     res.json(toPublic(doc));
@@ -34,7 +38,11 @@ export async function getHomepageSettingsPublic(_req: Request, res: Response, ne
   }
 }
 
-export async function getHomepageSettingsAdmin(_req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getHomepageSettingsAdmin(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     res.json(await getOrCreateHomepageSettings());
   } catch (e) {
@@ -42,7 +50,11 @@ export async function getHomepageSettingsAdmin(_req: Request, res: Response, nex
   }
 }
 
-export async function updateHomepageSettingsAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function updateHomepageSettingsAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const patch: Record<string, boolean> = {};
     for (const key of PUBLIC_FIELDS) {

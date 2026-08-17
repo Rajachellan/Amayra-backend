@@ -10,7 +10,7 @@ async function main() {
   startReminderJob();
   const app = createApp();
   const server = createServer(app);
-  
+
   initSocketIO(server);
 
   server.listen(env.PORT, env.HOST, () => {

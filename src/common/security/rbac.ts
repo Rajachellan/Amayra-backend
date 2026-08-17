@@ -28,6 +28,7 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     "homepage:write",
     "customers:read",
     "blogs:write",
+    "admin:manage",
   ],
   super_admin: [
     "catalog:read",
@@ -51,11 +52,15 @@ export function roleHasPermission(role: Role, permission: Permission): boolean {
 export function requirePermission(...permissions: Permission[]) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     const role = ((req as Request & { authRole?: Role }).authRole ?? "admin") as Role;
-    if (role === "super_admin") {
+    if (role === "super_admin" || role === "admin") {
       next();
       return;
     }
-    const userPermissions = ((req as Request & { authPermissions?: string[] }).authPermissions ?? ROLE_PERMISSIONS[role] ?? []) as Permission[];
+    const explicitPerms = (req as Request & { authPermissions?: string[] }).authPermissions;
+    const userPermissions =
+      explicitPerms && explicitPerms.length > 0
+        ? (explicitPerms as Permission[])
+        : ((ROLE_PERMISSIONS[role] ?? []) as Permission[]);
     const missing = permissions.filter((p) => !userPermissions.includes(p));
     if (missing.length) {
       next(new AppError(403, "Forbidden"));

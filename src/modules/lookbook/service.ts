@@ -4,7 +4,12 @@ import { toSlug } from "../../utils/slug.js";
 import { Lookbook } from "./model.js";
 import { pushAudit, summarizeLookbook } from "./mapper.js";
 import type { z } from "zod";
-import type { adminListQuerySchema, hotspotSchema, lookbookBodySchema, lookbookImageSchema } from "./validation.js";
+import type {
+  adminListQuerySchema,
+  hotspotSchema,
+  lookbookBodySchema,
+  lookbookImageSchema,
+} from "./validation.js";
 
 type LookbookBody = z.infer<typeof lookbookBodySchema>;
 type ImageBody = z.infer<typeof lookbookImageSchema>;
@@ -44,7 +49,11 @@ export async function listLookbooksPublic(featured?: string) {
   const filter: Record<string, unknown> = {
     $and: [
       {
-        $or: [{ status: "published" }, { status: { $exists: false }, active: true }, { active: true }],
+        $or: [
+          { status: "published" },
+          { status: { $exists: false }, active: true },
+          { active: true },
+        ],
       },
       {
         $or: [{ publishAt: null }, { publishAt: { $exists: false } }, { publishAt: { $lte: now } }],
@@ -236,7 +245,11 @@ export async function updateHotspot(
   hotspotId: string,
   hotspot: Partial<HotspotBody>
 ) {
-  if (!mongoose.isValidObjectId(id) || !mongoose.isValidObjectId(imageId) || !mongoose.isValidObjectId(hotspotId)) {
+  if (
+    !mongoose.isValidObjectId(id) ||
+    !mongoose.isValidObjectId(imageId) ||
+    !mongoose.isValidObjectId(hotspotId)
+  ) {
     throw new AppError(400, "Invalid id");
   }
 

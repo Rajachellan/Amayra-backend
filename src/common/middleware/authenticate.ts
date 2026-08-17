@@ -28,7 +28,11 @@ function bearerToken(header: string | undefined): string | null {
 }
 
 function readToken(req: Request): string | null {
-  return bearerToken(req.headers.authorization) ?? (req.cookies?.mairii_access_token as string | undefined) ?? null;
+  return (
+    bearerToken(req.headers.authorization) ??
+    (req.cookies?.mairii_access_token as string | undefined) ??
+    null
+  );
 }
 
 function verifyRole(req: Request, next: NextFunction, allowed: Role[]): void {
@@ -53,7 +57,10 @@ function verifyRole(req: Request, next: NextFunction, allowed: Role[]): void {
       return;
     }
     (req as Request & { authRole?: Role }).authRole = payload.role as Role;
-    (req as Request & { authPermissions?: string[] }).authPermissions = (payload as any).permissions ?? [];
+    (req as Request & { authPermissions?: string[] }).authPermissions =
+      Array.isArray((payload as any).permissions) && (payload as any).permissions.length > 0
+        ? (payload as any).permissions
+        : undefined;
     if (payload.role === "customer") {
       (req as Request & { customerId?: string }).customerId = payload.sub;
     } else {

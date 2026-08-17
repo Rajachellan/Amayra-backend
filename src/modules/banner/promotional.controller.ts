@@ -3,10 +3,7 @@ import { PromotionalBanner } from "../../models/PromotionalBanner.js";
 import { AppError } from "../../utils/AppError.js";
 import { pickImageUrl, type MediaAsset } from "../../utils/mediaAsset.js";
 import { resolveRedirectLink } from "../../utils/bannerLink.js";
-import {
-  DEFAULT_PROMOTION_LAYOUT,
-  PromotionLayout,
-} from "./promotion-layout.model.js";
+import { DEFAULT_PROMOTION_LAYOUT, PromotionLayout } from "./promotion-layout.model.js";
 
 function normalizeBody(body: Record<string, unknown>) {
   const out: Record<string, unknown> = { ...body };
@@ -51,8 +48,7 @@ async function toPublicCard(doc: Record<string, unknown>) {
   const mobileImage = doc.mobileImage as MediaAsset | undefined;
   const backgroundImage = doc.backgroundImage as MediaAsset | undefined;
   const icon = doc.icon as MediaAsset | undefined;
-  const buttonUrl =
-    (typeof doc.buttonUrl === "string" && doc.buttonUrl.trim()) || link || "";
+  const buttonUrl = (typeof doc.buttonUrl === "string" && doc.buttonUrl.trim()) || link || "";
 
   return {
     _id: doc._id,
@@ -121,7 +117,9 @@ export async function listPromotionalBanners(
   try {
     const [layout, list] = await Promise.all([
       getLayout(),
-      PromotionalBanner.find({ active: true }).sort({ order: 1, priority: -1, createdAt: -1 }).lean(),
+      PromotionalBanner.find({ active: true })
+        .sort({ order: 1, priority: -1, createdAt: -1 })
+        .lean(),
     ]);
     const visible = list.filter((b) => isScheduledActive(b));
     const cards = await Promise.all(visible.map((b) => toPublicCard(b)));

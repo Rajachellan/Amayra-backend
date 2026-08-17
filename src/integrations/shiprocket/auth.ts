@@ -1,4 +1,4 @@
-import { AppError } from '../../utils/AppError.js';
+import { AppError } from "../../utils/AppError.js";
 
 const BASE = process.env.SHIPROCKET_BASE_URL?.replace(/\/$/, "") ?? "https://apiv2.shiprocket.in";
 
@@ -26,7 +26,10 @@ export async function getShiprocketBearerToken(forceRefresh = false): Promise<st
   const email = process.env.SHIPROCKET_EMAIL?.trim();
   const password = process.env.SHIPROCKET_PASSWORD;
   if (!email || password === undefined || password === "") {
-    throw new AppError(500, "Shiprocket credentials missing (SHIPROCKET_EMAIL / SHIPROCKET_PASSWORD)");
+    throw new AppError(
+      500,
+      "Shiprocket credentials missing (SHIPROCKET_EMAIL / SHIPROCKET_PASSWORD)"
+    );
   }
 
   const now = Date.now();

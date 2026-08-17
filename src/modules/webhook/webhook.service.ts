@@ -19,7 +19,9 @@ export async function shouldProcessWebhookEvent(
       logger.info(`Webhook event already processed: ${provider} [${cleanEventId}]`);
       return false;
     }
-    logger.info(`Webhook event previously failed or pending, retrying: ${provider} [${cleanEventId}]`);
+    logger.info(
+      `Webhook event previously failed or pending, retrying: ${provider} [${cleanEventId}]`
+    );
     return true;
   }
 

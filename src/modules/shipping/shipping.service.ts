@@ -80,7 +80,9 @@ export async function bookShipment(args: {
 
   // IDEMPOTENCY check
   if (order.shippingInfo?.shipmentId) {
-    logger.info(`Shipment already booked for order ${order.orderNumber}. Returning existing details.`);
+    logger.info(
+      `Shipment already booked for order ${order.orderNumber}. Returning existing details.`
+    );
     return {
       order,
       alreadyBooked: true,
@@ -97,7 +99,8 @@ export async function bookShipment(args: {
   }
 
   const cust = order.customer as { email?: string } | null;
-  const customerEmail = cust?.email?.trim() || process.env.SHIPROCKET_FALLBACK_EMAIL || "noreply@mairiijewels.com";
+  const customerEmail =
+    cust?.email?.trim() || process.env.SHIPROCKET_FALLBACK_EMAIL || "noreply@mairiijewels.com";
 
   // Build Adhoc Order payload for Shiprocket
   const a = order.shippingAddress;
@@ -151,7 +154,7 @@ export async function bookShipment(args: {
 
   logger.info(`Calling Shiprocket Create Adhoc Order for Order: ${order.orderNumber}`);
   const created = await shiprocketClient.createAdhocOrder(adhocPayload);
-  
+
   const shipmentIdStr = shiprocketClient.extractShipmentIdFromCreateResponse(created);
   const srOrderId = shiprocketClient.extractSrOrderIdFromCreateResponse(created);
 
@@ -240,10 +243,7 @@ export async function processShiprocketTrackingUpdate(
   rawPayload: Record<string, any>
 ): Promise<void> {
   const order = await Order.findOne({
-    $or: [
-      { "shippingInfo.awbCode": awbCode },
-      { "shiprocket.awbCode": awbCode },
-    ],
+    $or: [{ "shippingInfo.awbCode": awbCode }, { "shiprocket.awbCode": awbCode }],
   });
 
   if (!order) {
@@ -303,4 +303,3 @@ export async function processShiprocketTrackingUpdate(
     },
   });
 }
-

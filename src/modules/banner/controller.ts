@@ -1,8 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
-import { Banner } from '../../models/Banner.js';
-import { AppError } from '../../utils/AppError.js';
-import { pickImageUrl, type MediaAsset } from '../../utils/mediaAsset.js';
-import { publishedBannerFilter, resolveRedirectLink } from '../../utils/bannerLink.js';
+import { Banner } from "../../models/Banner.js";
+import { AppError } from "../../utils/AppError.js";
+import { pickImageUrl, type MediaAsset } from "../../utils/mediaAsset.js";
+import { publishedBannerFilter, resolveRedirectLink } from "../../utils/bannerLink.js";
 
 const PATCHABLE_FIELDS = [
   "name",
@@ -101,7 +101,11 @@ export async function createBanner(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export async function listBannersAdmin(_req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listBannersAdmin(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const list = await Banner.find().sort({ order: 1, createdAt: -1 });
     res.json(list);
@@ -112,7 +116,9 @@ export async function listBannersAdmin(_req: Request, res: Response, next: NextF
 
 export async function listBanners(_req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
-    const list = await Banner.find(publishedBannerFilter()).sort({ order: 1, createdAt: -1 }).lean();
+    const list = await Banner.find(publishedBannerFilter())
+      .sort({ order: 1, createdAt: -1 })
+      .lean();
     const out = await Promise.all(list.map((b) => toPublicBanner(b)));
     res.json(out);
   } catch (e) {
@@ -156,11 +162,17 @@ export async function deleteBanner(req: Request, res: Response, next: NextFuncti
   }
 }
 
-export async function reorderBanners(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function reorderBanners(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const ids = Array.isArray(req.body?.ids) ? (req.body.ids as string[]) : [];
     if (!ids.length) throw new AppError(400, "ids array required");
-    await Promise.all(ids.map((id, index) => Banner.updateOne({ _id: id }, { $set: { order: index } })));
+    await Promise.all(
+      ids.map((id, index) => Banner.updateOne({ _id: id }, { $set: { order: index } }))
+    );
     const list = await Banner.find().sort({ order: 1, createdAt: -1 });
     res.json(list);
   } catch (e) {

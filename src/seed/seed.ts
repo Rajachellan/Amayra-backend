@@ -36,14 +36,15 @@ async function run() {
   await Admin.create({
     email: (process.env.ADMIN_EMAIL || "admin@amayra.local").toLowerCase(),
     passwordHash: await hashPassword(adminPass),
-    role: "admin",
+    role: "super_admin",
   });
 
   const jewellery = await Category.create({
     name: "Jewellery",
     slug: "jewellery",
     description: "Fine jewellery",
-    image: "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=1200&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=1200&auto=format&fit=crop",
     featured: true,
     showOnHomepage: true,
     order: 0,
@@ -65,7 +66,8 @@ async function run() {
       featured: true,
       showOnHomepage: true,
       active: true,
-      image: "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=800&auto=format&fit=crop",
+      image:
+        "https://images.unsplash.com/photo-1535632066927-ab7c9ab60908?q=80&w=800&auto=format&fit=crop",
     }))
   );
 
@@ -79,7 +81,8 @@ async function run() {
     name: "Heritage Series",
     slug: "heritage-series",
     description: "Temple and kundan artistry",
-    image: "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop",
     featured: true,
     order: 0,
     active: true,
@@ -89,7 +92,8 @@ async function run() {
     name: "Modern Minimal",
     slug: "modern-minimal",
     description: "Clean lines for everyday luxury",
-    image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=1200&auto=format&fit=crop",
+    image:
+      "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=1200&auto=format&fit=crop",
     featured: true,
     order: 1,
     active: true,
@@ -100,7 +104,8 @@ async function run() {
       name: "Wedding",
       slug: "wedding",
       description: "Bridal moments",
-      image: "https://images.unsplash.com/photo-1602173574767-37ac01994b2a?q=80&w=800&auto=format&fit=crop",
+      image:
+        "https://images.unsplash.com/photo-1602173574767-37ac01994b2a?q=80&w=800&auto=format&fit=crop",
       order: 0,
       active: true,
     },
@@ -118,7 +123,8 @@ async function run() {
     title: "Shop The Look — Royal Bridal",
     slug: "royal-bridal",
     description: "Complete the ensemble",
-    coverImage: "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop",
+    coverImage:
+      "https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?q=80&w=1200&auto=format&fit=crop",
     images: [
       "https://images.unsplash.com/photo-1611591437281-460bfbe1220a?q=80&w=1200&auto=format&fit=crop",
     ],
@@ -130,8 +136,10 @@ async function run() {
   await Banner.insertMany([
     {
       title: "Elegance Redefined",
-      subtitle: "Discover curated masterpieces designed for those who appreciate heritage artistry.",
-      image: "https://images.unsplash.com/photo-1617038220319-276d3cfab638?q=80&w=2000&auto=format&fit=crop",
+      subtitle:
+        "Discover curated masterpieces designed for those who appreciate heritage artistry.",
+      image:
+        "https://images.unsplash.com/photo-1617038220319-276d3cfab638?q=80&w=2000&auto=format&fit=crop",
       link: "/category/all",
       ctaLabel: "Explore Collection",
       order: 0,
@@ -140,7 +148,8 @@ async function run() {
     {
       title: "The Bridal Edit",
       subtitle: "Unveiling timeless treasures crafted for your most unforgettable moments.",
-      image: "https://images.unsplash.com/photo-1602173574767-37ac01994b2a?q=80&w=2000&auto=format&fit=crop",
+      image:
+        "https://images.unsplash.com/photo-1602173574767-37ac01994b2a?q=80&w=2000&auto=format&fit=crop",
       link: "/category/bridal",
       ctaLabel: "Discover Bridal",
       order: 1,
@@ -149,7 +158,8 @@ async function run() {
     {
       title: "Heritage Brilliance",
       subtitle: "Artisanal excellence passed down through generations of master craftsmen.",
-      image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=2000&auto=format&fit=crop",
+      image:
+        "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?q=80&w=2000&auto=format&fit=crop",
       link: "/about",
       ctaLabel: "Our Story",
       order: 2,
@@ -226,7 +236,8 @@ async function run() {
     name: "Pure Gold Temple Bangle",
     slug: "pure-gold-temple-bangle",
     shortDescription: "Handcrafted 22k temple motifs.",
-    description: "Handcrafted 22k pure gold bangle with intricate carvings of traditional Indian motifs.",
+    description:
+      "Handcrafted 22k pure gold bangle with intricate carvings of traditional Indian motifs.",
     category: bangles._id,
     collections: [colHeritage._id],
     sections: ["signature"],

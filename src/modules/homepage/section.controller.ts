@@ -1,12 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
 import mongoose from "mongoose";
-import { HomepageSection } from '../../models/HomepageSection.js';
-import { Category } from '../../models/Category.js';
-import { Product } from '../../models/Product.js';
-import { Collection } from '../../models/Collection.js';
-import { Lookbook } from '../../models/Lookbook.js';
-import { Occasion } from '../../models/Occasion.js';
-import { AppError } from '../../utils/AppError.js';
+import { HomepageSection } from "../../models/HomepageSection.js";
+import { Category } from "../../models/Category.js";
+import { Product } from "../../models/Product.js";
+import { Collection } from "../../models/Collection.js";
+import { Lookbook } from "../../models/Lookbook.js";
+import { Occasion } from "../../models/Occasion.js";
+import { AppError } from "../../utils/AppError.js";
 
 export async function createHomepageSection(
   req: Request,
@@ -34,25 +34,34 @@ export async function listHomepageSectionsAdmin(
   }
 }
 
-async function resolveReferences(
-  referenceType: string,
-  referenceIds: mongoose.Types.ObjectId[]
-) {
+async function resolveReferences(referenceType: string, referenceIds: mongoose.Types.ObjectId[]) {
   if (!referenceIds.length) return [];
   const ids = referenceIds;
   switch (referenceType) {
     case "Category":
-      return Category.find({ _id: { $in: ids }, active: true, status: { $in: ["published", null] } }).sort({ order: 1 }).lean();
+      return Category.find({
+        _id: { $in: ids },
+        active: true,
+        status: { $in: ["published", null] },
+      })
+        .sort({ order: 1 })
+        .lean();
     case "Product":
       return Product.find({ _id: { $in: ids }, status: { $in: ["published", null] } })
         .populate("category", "name slug")
         .lean();
     case "Collection":
-      return Collection.find({ _id: { $in: ids }, active: true }).sort({ order: 1 }).lean();
+      return Collection.find({ _id: { $in: ids }, active: true })
+        .sort({ order: 1 })
+        .lean();
     case "Lookbook":
-      return Lookbook.find({ _id: { $in: ids }, active: true }).sort({ order: 1 }).lean();
+      return Lookbook.find({ _id: { $in: ids }, active: true })
+        .sort({ order: 1 })
+        .lean();
     case "Occasion":
-      return Occasion.find({ _id: { $in: ids }, active: true }).sort({ order: 1 }).lean();
+      return Occasion.find({ _id: { $in: ids }, active: true })
+        .sort({ order: 1 })
+        .lean();
     default:
       return [];
   }
@@ -117,11 +126,17 @@ export async function deleteHomepageSection(
   }
 }
 
-export async function reorderHomepageSections(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function reorderHomepageSections(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const ids = Array.isArray(req.body?.ids) ? (req.body.ids as string[]) : [];
     if (!ids.length) throw new AppError(400, "ids array required");
-    await Promise.all(ids.map((id, index) => HomepageSection.updateOne({ _id: id }, { order: index })));
+    await Promise.all(
+      ids.map((id, index) => HomepageSection.updateOne({ _id: id }, { order: index }))
+    );
     res.json(await HomepageSection.find().sort({ order: 1 }));
   } catch (e) {
     next(e);

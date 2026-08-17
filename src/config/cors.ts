@@ -2,7 +2,9 @@ import type { CorsOptions } from "cors";
 import { env, isDevelopment, isProduction } from "./env.js";
 import { logSecurityEvent } from "./logger.js";
 
-const allowList = env.CORS_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean);
+const allowList = env.CORS_ORIGIN.split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 const lanOrigin =
   /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/;
 const mairiijewelsOrigin = /^https:\/\/([a-z0-9-]+\.)*mairiijewels\.com$/i;

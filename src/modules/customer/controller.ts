@@ -69,7 +69,11 @@ function ensureSingleDefault(addresses: Array<{ isDefault?: boolean }>, forceInd
   }
 }
 
-export async function registerCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function registerCustomer(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const body = req.body as {
       name?: string;
@@ -81,7 +85,10 @@ export async function registerCustomer(req: Request, res: Response, next: NextFu
     const email = emailSchema.parse(String(body.email ?? ""));
     const password = body.password ?? "";
     if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-      throw new AppError(400, "Password must be at least 8 characters and include a letter and a number");
+      throw new AppError(
+        400,
+        "Password must be at least 8 characters and include a letter and a number"
+      );
     }
     let phone: string | undefined;
     if (body.phone) {
@@ -99,7 +106,12 @@ export async function registerCustomer(req: Request, res: Response, next: NextFu
     const token = signCustomerToken(customer._id.toString());
     res.status(201).json({
       token,
-      customer: { id: customer._id, name: customer.name, email: customer.email, phone: customer.phone },
+      customer: {
+        id: customer._id,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+      },
     });
   } catch (e) {
     if (e instanceof z.ZodError) return next(new AppError(400, formatZodError(e)));
@@ -107,7 +119,11 @@ export async function registerCustomer(req: Request, res: Response, next: NextFu
   }
 }
 
-export async function loginCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function loginCustomer(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { email, password } = req.body as { email?: string; password?: string };
     if (!email || !password) throw new AppError(400, "Email and password required");
@@ -139,7 +155,11 @@ export async function loginCustomer(req: Request, res: Response, next: NextFunct
   }
 }
 
-export async function googleOAuthCustomer(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function googleOAuthCustomer(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { idToken } = req.body as { idToken?: string };
     if (!idToken) throw new AppError(400, "idToken required");
@@ -155,9 +175,7 @@ export async function googleOAuthCustomer(req: Request, res: Response, next: Nex
     if (!payload?.sub || !payload.email) throw new AppError(401, "Invalid Google token");
     const googleId = payload.sub;
     const email = payload.email.toLowerCase().trim();
-    const name =
-      payload.name?.trim() ||
-      (email.includes("@") ? email.split("@")[0] : "Customer");
+    const name = payload.name?.trim() || (email.includes("@") ? email.split("@")[0] : "Customer");
     const avatarUrl = payload.picture;
 
     let customer = await Customer.findOne({ $or: [{ googleId }, { email }] });
@@ -204,7 +222,11 @@ export async function meCustomer(req: Request, res: Response, next: NextFunction
   }
 }
 
-export async function updateCustomerProfile(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function updateCustomerProfile(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const customerId = customerIdFrom(req);
     const parsed = updateProfileSchema.parse(req.body ?? {});
@@ -224,7 +246,11 @@ export async function updateCustomerProfile(req: Request, res: Response, next: N
   }
 }
 
-export async function addCustomerAddress(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function addCustomerAddress(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const customerId = customerIdFrom(req);
     const parsed = addressSchema.parse(req.body ?? {});
@@ -255,7 +281,11 @@ export async function addCustomerAddress(req: Request, res: Response, next: Next
   }
 }
 
-export async function updateCustomerAddress(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function updateCustomerAddress(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const customerId = customerIdFrom(req);
     const addressId = String(req.params.addressId ?? "");
@@ -294,7 +324,11 @@ export async function updateCustomerAddress(req: Request, res: Response, next: N
   }
 }
 
-export async function deleteCustomerAddress(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function deleteCustomerAddress(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const customerId = customerIdFrom(req);
     const addressId = String(req.params.addressId ?? "");
@@ -315,7 +349,11 @@ export async function deleteCustomerAddress(req: Request, res: Response, next: N
   }
 }
 
-export async function setDefaultCustomerAddress(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function setDefaultCustomerAddress(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const customerId = customerIdFrom(req);
     const addressId = String(req.params.addressId ?? "");

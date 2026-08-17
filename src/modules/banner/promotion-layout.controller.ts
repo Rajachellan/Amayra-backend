@@ -1,8 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import {
-  DEFAULT_PROMOTION_LAYOUT,
-  PromotionLayout,
-} from "./promotion-layout.model.js";
+import { DEFAULT_PROMOTION_LAYOUT, PromotionLayout } from "./promotion-layout.model.js";
 
 async function getOrCreateLayout() {
   let doc = await PromotionLayout.findOne({ singletonKey: "default" });

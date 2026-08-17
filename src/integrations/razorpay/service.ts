@@ -1,5 +1,5 @@
 import Razorpay from "razorpay";
-import { AppError } from '../../utils/AppError.js';
+import { AppError } from "../../utils/AppError.js";
 
 export function getRazorpay(): Razorpay {
   const key_id = process.env.RAZORPAY_KEY_ID;
@@ -10,7 +10,11 @@ export function getRazorpay(): Razorpay {
   return new Razorpay({ key_id, key_secret });
 }
 
-export async function createRazorpayOrder(amountPaise: number, receipt: string, notes?: Record<string, string>) {
+export async function createRazorpayOrder(
+  amountPaise: number,
+  receipt: string,
+  notes?: Record<string, string>
+) {
   const rzp = getRazorpay();
   type OrderNotes = Record<string, string>;
   const orderOptions: Parameters<Razorpay["orders"]["create"]>[0] = {
@@ -22,7 +26,11 @@ export async function createRazorpayOrder(amountPaise: number, receipt: string, 
   return rzp.orders.create(orderOptions);
 }
 
-export async function createRazorpayRefund(paymentId: string, amountPaise: number, notes?: Record<string, string>) {
+export async function createRazorpayRefund(
+  paymentId: string,
+  amountPaise: number,
+  notes?: Record<string, string>
+) {
   const rzp = getRazorpay();
   return (rzp as any).refunds.create({
     payment_id: paymentId,
@@ -30,4 +38,3 @@ export async function createRazorpayRefund(paymentId: string, amountPaise: numbe
     ...(notes ? { notes } : {}),
   });
 }
-

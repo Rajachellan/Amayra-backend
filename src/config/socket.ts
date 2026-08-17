@@ -34,7 +34,9 @@ export function getIO(): Server {
     return {
       to: (room: string) => ({
         emit: (event: string, _data: any) => {
-          logger.warn(`getIO() called before initSocketIO() - event '${event}' to room '${room}' not sent`);
+          logger.warn(
+            `getIO() called before initSocketIO() - event '${event}' to room '${room}' not sent`
+          );
           return true;
         },
       }),

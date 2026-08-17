@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import { Lead } from '../../models/Lead.js';
-import { AppError } from '../../utils/AppError.js';
+import { Lead } from "../../models/Lead.js";
+import { AppError } from "../../utils/AppError.js";
 
 export async function submitLead(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
@@ -27,7 +27,11 @@ export async function submitLead(req: Request, res: Response, next: NextFunction
   }
 }
 
-export async function listLeadsAdmin(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function listLeadsAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 20));
@@ -54,11 +58,15 @@ export async function listLeadsAdmin(req: Request, res: Response, next: NextFunc
   }
 }
 
-export async function updateLeadStatus(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function updateLeadStatus(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { id } = req.params;
     const body = req.body as Record<string, unknown>;
-    
+
     if (body.status !== "new" && body.status !== "read" && body.status !== "archived") {
       throw new AppError(400, "Invalid status");
     }

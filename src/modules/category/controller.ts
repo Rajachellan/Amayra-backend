@@ -1,8 +1,8 @@
 import type { Request, Response, NextFunction } from "express";
-import { Category } from '../../models/Category.js';
-import { AppError } from '../../utils/AppError.js';
-import { toSlug } from '../../utils/slug.js';
-import { getCategoryTree } from '../../services/categoryService.js';
+import { Category } from "../../models/Category.js";
+import { AppError } from "../../utils/AppError.js";
+import { toSlug } from "../../utils/slug.js";
+import { getCategoryTree } from "../../services/categoryService.js";
 
 export async function createCategory(
   req: Request,
@@ -40,12 +40,11 @@ export async function listCategories(
 ): Promise<void> {
   try {
     const { featured, homepage, active, status } = req.query;
-    const filter: Record<string, unknown> = { 
-      status: { $in: ["published", null] } 
+    const filter: Record<string, unknown> = {
+      status: { $in: ["published", null] },
     };
     if (status === "all") delete filter.status;
     else if (typeof status === "string" && status) filter.status = status;
-
 
     if (featured === "true") filter.featured = true;
     if (homepage === "true") filter.showOnHomepage = true;

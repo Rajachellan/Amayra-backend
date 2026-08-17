@@ -58,18 +58,19 @@ export function mapShiprocketToMairiiShippingStatus(srStatus: string): MairiiShi
   if (norm.includes("AWB GENERATED") || norm === "AWB") return "AWB_GENERATED";
   if (norm.includes("PICKUP SCHEDULED")) return "PICKUP_SCHEDULED";
   if (norm.includes("PICKED UP") || norm === "PICKED") return "PICKED_UP";
-  
+
   if (norm.includes("OUT FOR DELIVERY") || norm === "OFD") return "OUT_FOR_DELIVERY";
   if (norm.includes("IN TRANSIT") || norm === "TRANSIT" || norm === "SHIPPED") return "IN_TRANSIT";
-  
+
   if (norm === "DELIVERED" || norm === "DELIVERY SUCCESSFUL") return "DELIVERED";
   if (norm === "CANCELLED" || norm === "CANCELED") return "CANCELLED";
-  
+
   if (norm.includes("RTO INITIATED")) return "RTO_INITIATED";
   if (norm.includes("RTO IN TRANSIT") || norm.includes("RTO TRANSIT")) return "RTO_IN_TRANSIT";
   if (norm.includes("RTO DELIVERED")) return "RTO_DELIVERED";
-  
-  if (norm.includes("FAILED") || norm.includes("UNDELIVERED") || norm.includes("RETURNING")) return "DELIVERY_FAILED";
+
+  if (norm.includes("FAILED") || norm.includes("UNDELIVERED") || norm.includes("RETURNING"))
+    return "DELIVERY_FAILED";
   if (norm === "NEW" || norm === "CREATED") return "CREATED";
 
   return "CREATED";
@@ -78,7 +79,9 @@ export function mapShiprocketToMairiiShippingStatus(srStatus: string): MairiiShi
 /**
  * Maps a Mairii shipping status to Mairii's overall order status.
  */
-export function mapShippingToOrderStatus(shippingStatus: MairiiShippingStatus): MairiiOrderStatus | null {
+export function mapShippingToOrderStatus(
+  shippingStatus: MairiiShippingStatus
+): MairiiOrderStatus | null {
   switch (shippingStatus) {
     case "AWB_GENERATED":
     case "PICKUP_SCHEDULED":

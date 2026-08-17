@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
-import { Occasion } from '../../models/Occasion.js';
-import { AppError } from '../../utils/AppError.js';
-import { toSlug } from '../../utils/slug.js';
+import { Occasion } from "../../models/Occasion.js";
+import { AppError } from "../../utils/AppError.js";
+import { toSlug } from "../../utils/slug.js";
 
 export async function createOccasion(
   req: Request,

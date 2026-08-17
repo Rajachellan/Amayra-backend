@@ -21,7 +21,20 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
     }
 
     const role = admin.role === "super_admin" ? "super_admin" : (admin.role ?? "admin");
-    const permissions = admin.permissions ?? [];
+    const permissions =
+      admin.permissions && admin.permissions.length > 0
+        ? admin.permissions
+        : [
+            "catalog:read",
+            "catalog:write",
+            "orders:read",
+            "orders:write",
+            "payments:read",
+            "shipments:write",
+            "homepage:write",
+            "customers:read",
+            "blogs:write",
+          ];
     const { token } = signAccessToken(admin._id.toString(), role as any, permissions);
     const { token: refreshToken } = signRefreshToken(admin._id.toString(), role as any);
 

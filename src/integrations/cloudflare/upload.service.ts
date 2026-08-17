@@ -149,13 +149,7 @@ async function saveLocal(
 }
 
 export type UploadFolder =
-  | "products"
-  | "categories"
-  | "banners"
-  | "blogs"
-  | "promotional"
-  | "lookbooks"
-  | "misc";
+  "products" | "categories" | "banners" | "blogs" | "promotional" | "lookbooks" | "misc";
 
 export type UploadResult = { url: string; key: string };
 

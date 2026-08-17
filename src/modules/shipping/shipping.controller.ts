@@ -90,7 +90,8 @@ export async function postOrderShiprocketShipment(
       heightCm?: number;
     };
 
-    const pickupLocation = typeof body.pickupLocation === "string" ? body.pickupLocation.trim() : "";
+    const pickupLocation =
+      typeof body.pickupLocation === "string" ? body.pickupLocation.trim() : "";
     const courierId = Number(body.courierId);
     const weightKg = Number(body.weightKg);
     const lengthCm = Number(body.lengthCm) || 10;
@@ -98,8 +99,10 @@ export async function postOrderShiprocketShipment(
     const heightCm = Number(body.heightCm) || 5;
 
     if (!pickupLocation) throw new AppError(400, "pickupLocation is required");
-    if (!Number.isFinite(courierId) || courierId < 1) throw new AppError(400, "courierId is required");
-    if (!Number.isFinite(weightKg) || weightKg <= 0) throw new AppError(400, "weightKg must be positive");
+    if (!Number.isFinite(courierId) || courierId < 1)
+      throw new AppError(400, "courierId is required");
+    if (!Number.isFinite(weightKg) || weightKg <= 0)
+      throw new AppError(400, "weightKg must be positive");
 
     const result = await shippingService.bookShipment({
       orderId: id,
@@ -122,7 +125,11 @@ export async function postOrderShiprocketShipment(
   }
 }
 
-import { shouldProcessWebhookEvent, markWebhookEventProcessed, markWebhookEventFailed } from "../webhook/webhook.service.js";
+import {
+  shouldProcessWebhookEvent,
+  markWebhookEventProcessed,
+  markWebhookEventFailed,
+} from "../webhook/webhook.service.js";
 import { logger } from "../../config/logger.js";
 
 /**
@@ -166,4 +173,3 @@ export async function postShiprocketWebhook(req: Request, res: Response): Promis
     res.status(500).json({ ok: false, error: err.message });
   }
 }
-

@@ -1,6 +1,12 @@
 import mongoose, { Schema, type InferSchemaType } from "mongoose";
 
-export const PAYMENT_STATUSES = ["created", "authorized", "captured", "failed", "refunded"] as const;
+export const PAYMENT_STATUSES = [
+  "created",
+  "authorized",
+  "captured",
+  "failed",
+  "refunded",
+] as const;
 
 const paymentSchema = new Schema(
   {

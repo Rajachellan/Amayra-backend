@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
-import { Order } from '../../models/Order.js';
-import { AppError } from '../../utils/AppError.js';
+import { Order } from "../../models/Order.js";
+import { AppError } from "../../utils/AppError.js";
 import {
   assignAwb,
   courierServiceability,
@@ -9,18 +9,25 @@ import {
   extractSrOrderIdFromCreateResponse,
   listPickupLocations,
   type NormalizedPickup,
-} from '../../services/shiprocketService.js';
+} from "../../services/shiprocketService.js";
 
 const BOOKABLE_STATUSES = ["paid", "processing", "shipped"] as const;
 
-function orderCanBookShiprocket(o: { status: string; shiprocket?: { shipmentId?: string | null | undefined } | null }) {
+function orderCanBookShiprocket(o: {
+  status: string;
+  shiprocket?: { shipmentId?: string | null | undefined } | null;
+}) {
   if (!(BOOKABLE_STATUSES as readonly string[]).includes(o.status)) return false;
   const sid = o.shiprocket?.shipmentId;
   if (typeof sid === "string" && sid.trim() !== "") return false;
   return true;
 }
 
-export async function getShiprocketPickups(_req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function getShiprocketPickups(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const items = await listPickupLocations();
     res.json({ items });
@@ -39,18 +46,25 @@ export async function getOrderShiprocketServiceability(
     const weightKg = Number(req.query.weightKg);
     const pickupNickname = typeof req.query.pickup === "string" ? req.query.pickup.trim() : "";
 
-    if (!pickupNickname) throw new AppError(400, "Query `pickup` (pickup location nickname) is required");
-    if (!Number.isFinite(weightKg) || weightKg <= 0) throw new AppError(400, "Query `weightKg` must be a positive number");
+    if (!pickupNickname)
+      throw new AppError(400, "Query `pickup` (pickup location nickname) is required");
+    if (!Number.isFinite(weightKg) || weightKg <= 0)
+      throw new AppError(400, "Query `weightKg` must be a positive number");
 
     const order = await Order.findById(id).lean();
     if (!order) throw new AppError(404, "Order not found");
     if (!orderCanBookShiprocket(order)) {
-      throw new AppError(400, "Order is not eligible for Shiprocket booking (must be paid/processing/shipped and not already booked)");
+      throw new AppError(
+        400,
+        "Order is not eligible for Shiprocket booking (must be paid/processing/shipped and not already booked)"
+      );
     }
 
     const pickups = await listPickupLocations();
-    const pickup = pickups.find((p) => p.nickname === pickupNickname) as NormalizedPickup | undefined;
-    if (!pickup) throw new AppError(400, "Unknown pickup location. Refresh pickup list from Shiprocket.");
+    const pickup = pickups.find((p) => p.nickname === pickupNickname) as
+      NormalizedPickup | undefined;
+    if (!pickup)
+      throw new AppError(400, "Unknown pickup location. Refresh pickup list from Shiprocket.");
 
     const deliveryPin = order.shippingAddress?.pincode?.replace(/\s/g, "") ?? "";
     if (!deliveryPin) throw new AppError(400, "Order has no delivery pincode");
@@ -160,7 +174,8 @@ function parseAwbFromAssignResponse(data: Record<string, unknown>): {
     undefined;
   const labelUrl =
     (typeof payload.label_url === "string" && payload.label_url) ||
-    (typeof (payload as { label?: string }).label === "string" && (payload as { label: string }).label) ||
+    (typeof (payload as { label?: string }).label === "string" &&
+      (payload as { label: string }).label) ||
     undefined;
 
   const courierName =
@@ -172,7 +187,11 @@ function parseAwbFromAssignResponse(data: Record<string, unknown>): {
   return { awb, labelUrl, courierName };
 }
 
-export async function postOrderShiprocketShipment(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function postOrderShiprocketShipment(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
   try {
     const { id } = req.params;
     const body = req.body as {
@@ -185,7 +204,8 @@ export async function postOrderShiprocketShipment(req: Request, res: Response, n
       forceReplace?: boolean;
     };
 
-    const pickupLocation = typeof body.pickupLocation === "string" ? body.pickupLocation.trim() : "";
+    const pickupLocation =
+      typeof body.pickupLocation === "string" ? body.pickupLocation.trim() : "";
     const courierId = Number(body.courierId);
     const weightKg = Number(body.weightKg);
     const lengthCm = Number(body.lengthCm) || 10;
@@ -194,16 +214,20 @@ export async function postOrderShiprocketShipment(req: Request, res: Response, n
 
     if (!pickupLocation) throw new AppError(400, "pickupLocation required");
     if (!Number.isFinite(courierId) || courierId < 1) throw new AppError(400, "courierId required");
-    if (!Number.isFinite(weightKg) || weightKg <= 0) throw new AppError(400, "weightKg must be positive");
+    if (!Number.isFinite(weightKg) || weightKg <= 0)
+      throw new AppError(400, "weightKg must be positive");
 
     const orderDoc = await Order.findById(id).populate("customer", "email name");
     if (!orderDoc) throw new AppError(404, "Order not found");
 
     if (orderDoc.shiprocket?.shipmentId && !body.forceReplace) {
-      throw new AppError(409, "Shipment already exists for this order. Pass forceReplace: true to re-book (destructive)");
+      throw new AppError(
+        409,
+        "Shipment already exists for this order. Pass forceReplace: true to re-book (destructive)"
+      );
     }
 
-    if (!((BOOKABLE_STATUSES as readonly string[]).includes(orderDoc.status))) {
+    if (!(BOOKABLE_STATUSES as readonly string[]).includes(orderDoc.status)) {
       throw new AppError(400, "Order must be paid/processing/shipped before booking Shiprocket");
     }
 
@@ -215,7 +239,8 @@ export async function postOrderShiprocketShipment(req: Request, res: Response, n
     if (!fresh) throw new AppError(404, "Order not found");
 
     const cust = fresh.customer as { email?: string } | null;
-    const customerEmail = cust?.email?.trim() || process.env.SHIPROCKET_FALLBACK_EMAIL || "noreply@mairiijewels.com";
+    const customerEmail =
+      cust?.email?.trim() || process.env.SHIPROCKET_FALLBACK_EMAIL || "noreply@mairiijewels.com";
 
     const adhocPayload = buildAdhocPayload({
       order: {

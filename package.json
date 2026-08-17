@@ -10,6 +10,7 @@
     "start": "node dist/server.js",
     "seed": "node dist/seed/seed.js",
     "seed:dev": "tsx src/seed/seed.ts",
+    "seed:clean": "tsx src/seed/wipe.ts",
     "lint": "eslint src --max-warnings=100",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.{ts,js,json}\"",
@@ -20,8 +21,7 @@
   },
   "lint-staged": {
     "src/**/*.{ts,js}": [
-      "eslint --fix",
-      "prettier --write"
+      "eslint --fix --cache"
     ]
   },
   "dependencies": {

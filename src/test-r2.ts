@@ -15,7 +15,10 @@ async function test() {
 
   try {
     const res = await client.send(new ListBucketsCommand({}));
-    console.log("Success! Buckets:", res.Buckets?.map(b => b.Name));
+    console.log(
+      "Success! Buckets:",
+      res.Buckets?.map((b) => b.Name)
+    );
   } catch (err) {
     console.error("Error connecting:");
     console.error(err);
