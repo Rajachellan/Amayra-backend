@@ -38,6 +38,9 @@ import * as paymentAdminController from "../controllers/paymentAdminController.j
 import * as savedItemsController from "../modules/customer/savedItems.controller.js";
 import * as returnController from "../modules/return/return.controller.js";
 import * as inventoryController from "../modules/inventory/inventory.controller.js";
+import * as auditController from "../modules/audit/audit.controller.js";
+import * as pricingController from "../modules/pricing/pricing.controller.js";
+import * as couponController from "../modules/coupon/coupon.controller.js";
 import { storeUploadedFile } from "../services/storageUpload.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -343,6 +346,42 @@ router.put(
   authenticateAdmin,
   requirePermission("homepage:write"),
   promotionLayoutController.updatePromotionLayoutAdmin
+);
+
+// --- AUDIT LOGS ---
+router.get("/admin/audit-logs", authenticateAdmin, auditController.getAuditLogsAdmin);
+
+// --- PRICING ENGINE & SLABS ---
+router.post("/cart/calculate", pricingController.calculateCart);
+router.get("/admin/pricing-settings", authenticateAdmin, pricingController.getPricingSettingsAdmin);
+router.put(
+  "/admin/pricing-settings",
+  authenticateAdmin,
+  requirePermission("homepage:write"),
+  pricingController.updatePricingSettingsAdmin
+);
+
+// --- COUPONS ---
+router.post("/coupons/validate", couponController.validateCoupon);
+router.post("/cart/validate-coupon", couponController.validateCoupon);
+router.get("/admin/coupons", authenticateAdmin, couponController.listCouponsAdmin);
+router.post(
+  "/admin/coupons",
+  authenticateAdmin,
+  requirePermission("homepage:write"),
+  couponController.createCouponAdmin
+);
+router.put(
+  "/admin/coupons/:id",
+  authenticateAdmin,
+  requirePermission("homepage:write"),
+  couponController.updateCouponAdmin
+);
+router.delete(
+  "/admin/coupons/:id",
+  authenticateAdmin,
+  requirePermission("homepage:write"),
+  couponController.deleteCouponAdmin
 );
 
 router.get("/announcements", announcementController.listAnnouncements);

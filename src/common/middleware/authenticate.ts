@@ -65,6 +65,8 @@ function verifyRole(req: Request, next: NextFunction, allowed: Role[]): void {
       (req as Request & { customerId?: string }).customerId = payload.sub;
     } else {
       (req as Request & { adminId?: string }).adminId = payload.sub;
+      (req as Request & { adminEmail?: string }).adminEmail =
+        (payload as any).email || (payload as any).adminEmail || "";
     }
     next();
   } catch {

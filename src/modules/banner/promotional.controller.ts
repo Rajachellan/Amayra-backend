@@ -4,6 +4,7 @@ import { AppError } from "../../utils/AppError.js";
 import { pickImageUrl, type MediaAsset } from "../../utils/mediaAsset.js";
 import { resolveRedirectLink } from "../../utils/bannerLink.js";
 import { DEFAULT_PROMOTION_LAYOUT, PromotionLayout } from "./promotion-layout.model.js";
+import { logAdminAction } from "../audit/audit.service.js";
 
 function normalizeBody(body: Record<string, unknown>) {
   const out: Record<string, unknown> = { ...body };
@@ -90,6 +91,12 @@ export async function createPromotionalBanner(
 ): Promise<void> {
   try {
     const doc = await PromotionalBanner.create(normalizeBody(req.body as Record<string, unknown>));
+    await logAdminAction(req, {
+      action: "PROMOTION_CARD_CREATE",
+      module: "promotions",
+      description: `Created promotion card '${doc.title || doc.name}'`,
+      targetId: doc._id.toString(),
+    });
     res.status(201).json(doc);
   } catch (e) {
     next(e);
@@ -141,6 +148,12 @@ export async function updatePromotionalBanner(
       { new: true, runValidators: true }
     );
     if (!doc) throw new AppError(404, "Not found");
+    await logAdminAction(req, {
+      action: "PROMOTION_CARD_UPDATE",
+      module: "promotions",
+      description: `Updated promotion card '${doc.title || doc.name}'`,
+      targetId: doc._id.toString(),
+    });
     res.json(doc);
   } catch (e) {
     next(e);
@@ -155,6 +168,12 @@ export async function deletePromotionalBanner(
   try {
     const doc = await PromotionalBanner.findByIdAndDelete(req.params.id);
     if (!doc) throw new AppError(404, "Not found");
+    await logAdminAction(req, {
+      action: "PROMOTION_CARD_DELETE",
+      module: "promotions",
+      description: `Deleted promotion card '${doc.title || doc.name}'`,
+      targetId: doc._id.toString(),
+    });
     res.json({ ok: true });
   } catch (e) {
     next(e);

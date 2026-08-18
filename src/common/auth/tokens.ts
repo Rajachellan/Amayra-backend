@@ -6,11 +6,12 @@ import type { Role } from "../security/rbac.js";
 export function signAccessToken(
   subject: string,
   role: Role,
-  permissions: string[] = []
+  permissions: string[] = [],
+  email?: string
 ): { token: string; jti: string; expiresIn: string } {
   const jti = randomUUID();
   const token = jwt.sign(
-    { sub: subject, role, permissions, jti, typ: "access" },
+    { sub: subject, role, permissions, email, jti, typ: "access" },
     jwtConfig.secret,
     {
       expiresIn: jwtConfig.expiresIn as jwt.SignOptions["expiresIn"],

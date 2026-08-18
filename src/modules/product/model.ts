@@ -36,6 +36,7 @@ const productSchema = new Schema(
     images: [{ type: String }],
     price: { type: Number, required: true },
     salePrice: { type: Number },
+    gstRate: { type: Number, default: 3 },
     stock: { type: Number, default: 0 },
     sku: { type: String, index: true },
     tags: [{ type: String }],

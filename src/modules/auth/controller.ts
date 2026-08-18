@@ -35,7 +35,7 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
             "customers:read",
             "blogs:write",
           ];
-    const { token } = signAccessToken(admin._id.toString(), role as any, permissions);
+    const { token } = signAccessToken(admin._id.toString(), role as any, permissions, admin.email);
     const { token: refreshToken } = signRefreshToken(admin._id.toString(), role as any);
 
     const adminPayload = {
@@ -46,6 +46,17 @@ export async function login(req: Request, res: Response, next: NextFunction): Pr
     };
 
     logSecurityEvent("admin_login_success", { adminId: adminPayload.id, ip: req.ip });
+
+    // Write to audit log
+    const { logAdminAction } = await import("../audit/audit.service.js");
+    (req as any).adminId = adminPayload.id;
+    (req as any).adminEmail = adminPayload.email;
+    await logAdminAction(req, {
+      action: "ADMIN_LOGIN",
+      module: "auth",
+      description: `Admin logged in (${adminPayload.email})`,
+      targetId: adminPayload.id,
+    });
 
     // Keep existing response shape for admin panel compatibility.
     // refreshToken is additive and ignored by older clients.

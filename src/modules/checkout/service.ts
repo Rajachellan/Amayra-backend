@@ -43,8 +43,10 @@ export async function generateOrderNumber(): Promise<string> {
   return `${prefix}${seq}`;
 }
 
+import { calculateCartPricing } from "../pricing/pricing.service.js";
+
 export async function buildOrderDraft(
-  _customerId: mongoose.Types.ObjectId,
+  customerId: mongoose.Types.ObjectId,
   lines: CheckoutLineInput[],
   shippingAddress: ShippingAddressInput,
   couponCode?: string
@@ -62,26 +64,26 @@ export async function buildOrderDraft(
   }[];
   subtotal: number;
   discount: number;
+  automaticDiscount: number;
+  couponDiscount: number;
+  taxableValue: number;
+  gstRate: number;
+  gstAmount: number;
+  discountSlab: { minimumCartValue: number; discountPercentage: number };
   tax: number;
   shipping: number;
   total: number;
   couponCode?: string;
 }> {
   if (!lines?.length) throw new AppError(400, "Cart is empty");
-  const slugCounts = new Map<string, number>();
-  for (const line of lines) {
-    const q = Math.floor(Number(line.quantity));
-    if (!line.slug?.trim() || q < 1) throw new AppError(400, "Invalid line item");
-    slugCounts.set(line.slug.trim(), (slugCounts.get(line.slug.trim()) ?? 0) + q);
-  }
 
-  const slugs = Array.from(slugCounts.keys());
-  const products = await Product.find({
-    slug: { $in: slugs },
-    status: { $in: publishedStatuses },
+  // Calculate pricing using centralized pricing engine
+  const pricing = await calculateCartPricing({
+    items: lines.map((l) => ({ slug: l.slug, quantity: l.quantity })),
+    couponCode,
+    userId: customerId.toString(),
   });
 
-  const bySlug = new Map(products.map((p) => [p.slug, p]));
   const items: {
     product: mongoose.Types.ObjectId;
     name: string;
@@ -92,69 +94,25 @@ export async function buildOrderDraft(
     lineTotal: number;
     image?: string;
   }[] = [];
-  let subtotal = 0;
 
-  for (const [slug, quantity] of slugCounts.entries()) {
-    const p = bySlug.get(slug);
-    if (!p) throw new AppError(400, `Product not found or unavailable: ${slug}`);
-    const unitPrice = p.salePrice ?? p.price;
-    if (!(unitPrice >= 0)) throw new AppError(400, `Invalid price for ${slug}`);
-    if (p.stock < quantity)
-      throw new AppError(
-        400,
-        `${p.name} has insufficient stock (${p.stock} available, requested ${quantity})`
-      );
-    const lineTotal = Math.round(unitPrice * quantity * 100) / 100;
-    subtotal += lineTotal;
+  for (const item of pricing.items) {
     items.push({
-      product: p._id,
-      name: p.name,
-      slug: p.slug,
-      sku: p.sku ?? undefined,
-      unitPrice,
-      quantity,
-      lineTotal,
-      image: p.images?.[0],
+      product: new mongoose.Types.ObjectId(item.productId),
+      name: item.name,
+      slug: item.slug,
+      sku: item.sku,
+      unitPrice: item.unitPrice,
+      quantity: item.quantity,
+      lineTotal: item.lineTotal,
+      image: item.image,
     });
   }
 
-  subtotal = Math.round(subtotal * 100) / 100;
+  // Shipping charges: Free above 1499, else 199
+  const shipping = pricing.subtotal > 0 && pricing.subtotal < 1499 ? 199 : 0;
 
-  let discount = 0;
-  if (couponCode) {
-    const code = couponCode.trim().toUpperCase();
-    if (code === "WELCOME5") {
-      discount = Math.round(subtotal * 0.05 * 100) / 100;
-    } else {
-      const banner = await PromotionalBanner.findOne({
-        couponCode: { $regex: new RegExp(`^${code}$`, "i") },
-      });
-      if (banner) {
-        let pct = 0.05;
-        const match = code.match(/\d+/);
-        if (match) {
-          const val = parseInt(match[0], 10);
-          if (val > 0 && val <= 100) pct = val / 100;
-        }
-        discount = Math.round(subtotal * pct * 100) / 100;
-      } else {
-        throw new AppError(400, `Invalid coupon code: ${couponCode}`);
-      }
-    }
-  }
-
-  // 2. Extra 10% Off for subtotal >= 3499
-  let milestoneDiscount = 0;
-  if (subtotal >= 3499) {
-    milestoneDiscount = Math.round(subtotal * 0.1 * 100) / 100;
-    discount += milestoneDiscount;
-  }
-
-  // 3. Shipping charges: Free above 1499, else 199
-  const shipping = subtotal > 0 && subtotal < 1499 ? 199 : 0;
-
-  // 4. Free Gift for subtotal >= 6999
-  if (subtotal >= 6999) {
+  // Free Gift for subtotal >= 6999
+  if (pricing.subtotal >= 6999) {
     items.push({
       product: new mongoose.Types.ObjectId("600000000000000000000799"),
       name: "Free Gift (Worth ₹799)",
@@ -167,8 +125,7 @@ export async function buildOrderDraft(
     });
   }
 
-  const GST = 0;
-  const { tax, total } = normalizeOrderTotal(subtotal - discount, GST, shipping);
+  const finalTotal = Math.round((pricing.finalAmount + shipping) * 100) / 100;
 
   const addr = shippingAddress;
   const fullName = addr.fullName?.trim();
@@ -186,12 +143,19 @@ export async function buildOrderDraft(
   return {
     orderNumber,
     items,
-    subtotal,
-    discount,
-    tax,
+    subtotal: pricing.subtotal,
+    discount: pricing.totalDiscount,
+    automaticDiscount: pricing.automaticDiscount,
+    couponDiscount: pricing.couponDiscount,
+    taxableValue: pricing.taxableValue,
+    gstRate: pricing.gstRate,
+    gstAmount: pricing.gstAmount,
+    discountSlab: pricing.discountSlab,
+    tax: pricing.gstAmount,
     shipping,
-    total,
-    couponCode: couponCode ? couponCode.trim().toUpperCase() : undefined,
+    total: finalTotal,
+    couponCode:
+      pricing.appliedCoupon?.code || (couponCode ? couponCode.trim().toUpperCase() : undefined),
   };
 }
 
@@ -219,7 +183,13 @@ export async function createPendingOrderFromDraft(args: {
     },
     subtotal: d.subtotal,
     discount: d.discount,
+    automaticDiscount: d.automaticDiscount,
+    couponDiscount: d.couponDiscount,
     couponCode: d.couponCode,
+    taxableValue: d.taxableValue,
+    gstRate: d.gstRate,
+    gstAmount: d.gstAmount,
+    discountSlab: d.discountSlab,
     tax: d.tax,
     shipping: d.shipping,
     total: d.total,
@@ -307,7 +277,13 @@ export async function createCodOrderFromDraft(args: {
           },
           subtotal: d.subtotal,
           discount: d.discount,
+          automaticDiscount: d.automaticDiscount,
+          couponDiscount: d.couponDiscount,
           couponCode: d.couponCode,
+          taxableValue: d.taxableValue,
+          gstRate: d.gstRate,
+          gstAmount: d.gstAmount,
+          discountSlab: d.discountSlab,
           tax: d.tax,
           shipping: d.shipping,
           total: d.total,
