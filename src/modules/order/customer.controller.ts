@@ -233,8 +233,17 @@ export async function getMyOrder(req: Request, res: Response, next: NextFunction
     const customerId = (req as Request & { customerId?: string }).customerId;
     if (!customerId) throw new AppError(401, "Unauthorized");
     const { id } = req.params;
+    const orderId = Array.isArray(id) ? id[0] : String(id);
 
-    const order = await Order.findOne({ _id: id, customer: customerId }).populate("payment").lean();
+    const isObjectId = mongoose.Types.ObjectId.isValid(orderId);
+    const query = {
+      customer: customerId,
+      ...(isObjectId
+        ? { $or: [{ _id: orderId }, { orderNumber: orderId }] }
+        : { orderNumber: orderId }),
+    };
+
+    const order = await Order.findOne(query).populate("payment").lean();
 
     if (!order) throw new AppError(404, "Order not found");
     if (!orderIsVisibleToCustomer(order)) throw new AppError(404, "Order not found");
@@ -253,8 +262,17 @@ export async function getMyOrderTracking(
     const customerId = (req as Request & { customerId?: string }).customerId;
     if (!customerId) throw new AppError(401, "Unauthorized");
     const { id } = req.params;
+    const orderId = Array.isArray(id) ? id[0] : String(id);
 
-    const order = await Order.findOne({ _id: id, customer: customerId }).lean();
+    const isObjectId = mongoose.Types.ObjectId.isValid(orderId);
+    const query = {
+      customer: customerId,
+      ...(isObjectId
+        ? { $or: [{ _id: orderId }, { orderNumber: orderId }] }
+        : { orderNumber: orderId }),
+    };
+
+    const order = await Order.findOne(query).lean();
     if (!order) throw new AppError(404, "Order not found");
     if (!orderIsVisibleToCustomer(order)) throw new AppError(404, "Order not found");
 

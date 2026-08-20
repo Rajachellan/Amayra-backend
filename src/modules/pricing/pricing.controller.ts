@@ -46,10 +46,20 @@ export async function updatePricingSettingsAdmin(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { discountSlabs, allowCouponWithSlabDiscount, defaultGstRate } = req.body as {
+    const {
+      discountSlabs,
+      allowCouponWithSlabDiscount,
+      defaultGstRate,
+      enableFreeGift,
+      freeGiftThreshold,
+      freeGiftName,
+    } = req.body as {
       discountSlabs?: Array<{ minimumCartValue: number; discountPercentage: number }>;
       allowCouponWithSlabDiscount?: boolean;
       defaultGstRate?: number;
+      enableFreeGift?: boolean;
+      freeGiftThreshold?: number;
+      freeGiftName?: string;
     };
 
     const doc = await getOrCreatePricingSettings();
@@ -69,6 +79,18 @@ export async function updatePricingSettingsAdmin(
       doc.defaultGstRate = Number(defaultGstRate) || 3;
     }
 
+    if (enableFreeGift !== undefined) {
+      (doc as any).enableFreeGift = Boolean(enableFreeGift);
+    }
+
+    if (freeGiftThreshold !== undefined) {
+      (doc as any).freeGiftThreshold = Math.max(0, Number(freeGiftThreshold) || 0);
+    }
+
+    if (freeGiftName !== undefined) {
+      (doc as any).freeGiftName = String(freeGiftName).trim() || "Free Gift (Worth ₹799)";
+    }
+
     await doc.save();
 
     await logAdminAction(req, {
@@ -79,6 +101,9 @@ export async function updatePricingSettingsAdmin(
         discountSlabs: doc.discountSlabs,
         allowCouponWithSlabDiscount: doc.allowCouponWithSlabDiscount,
         defaultGstRate: doc.defaultGstRate,
+        enableFreeGift: (doc as any).enableFreeGift,
+        freeGiftThreshold: (doc as any).freeGiftThreshold,
+        freeGiftName: (doc as any).freeGiftName,
       },
     });
 

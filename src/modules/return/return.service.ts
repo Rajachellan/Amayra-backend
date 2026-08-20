@@ -37,7 +37,12 @@ export async function createReturnRequest(args: {
   reason: "DONT_LIKE" | "DAMAGED" | "WRONG_PRODUCT" | "QUALITY_ISSUE" | "SIZE_ISSUE" | "OTHER";
   description?: string;
 }): Promise<any> {
-  const order = await Order.findById(args.orderId);
+  const isObjectId = mongoose.Types.ObjectId.isValid(args.orderId);
+  const order = await Order.findOne(
+    isObjectId
+      ? { $or: [{ _id: args.orderId }, { orderNumber: args.orderId }] }
+      : { orderNumber: args.orderId }
+  );
   if (!order) throw new AppError(404, "Order not found");
 
   if (order.customer.toString() !== args.customerId) {

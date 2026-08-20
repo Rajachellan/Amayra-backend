@@ -21,6 +21,9 @@ const pricingSettingsSchema = new Schema(
     },
     allowCouponWithSlabDiscount: { type: Boolean, default: true },
     defaultGstRate: { type: Number, default: 3 },
+    enableFreeGift: { type: Boolean, default: false },
+    freeGiftThreshold: { type: Number, default: 6999 },
+    freeGiftName: { type: String, default: "Free Gift (Worth ₹799)" },
   },
   { timestamps: true }
 );
@@ -43,6 +46,9 @@ export async function getOrCreatePricingSettings() {
       ],
       allowCouponWithSlabDiscount: true,
       defaultGstRate: 3,
+      enableFreeGift: false,
+      freeGiftThreshold: 6999,
+      freeGiftName: "Free Gift (Worth ₹799)",
     });
   }
   return doc;

@@ -111,11 +111,11 @@ export async function buildOrderDraft(
   // Shipping charges: Free above 1499, else 199
   const shipping = pricing.subtotal > 0 && pricing.subtotal < 1499 ? 199 : 0;
 
-  // Free Gift for subtotal >= 6999
-  if (pricing.subtotal >= 6999) {
+  // Free Gift (only if enabled in admin settings and threshold unlocked)
+  if (pricing.freeGift?.enabled && pricing.freeGift?.unlocked) {
     items.push({
       product: new mongoose.Types.ObjectId("600000000000000000000799"),
-      name: "Free Gift (Worth ₹799)",
+      name: pricing.freeGift.name || "Free Gift (Worth ₹799)",
       slug: "free-gift-worth-799",
       sku: "GIFT799",
       unitPrice: 0,
