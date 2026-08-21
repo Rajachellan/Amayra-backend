@@ -364,6 +364,8 @@ router.put(
 );
 
 // --- COUPONS ---
+router.get("/coupons/public", couponController.listPublicCoupons);
+router.get("/coupons", couponController.listPublicCoupons);
 router.post("/coupons/validate", couponController.validateCoupon);
 router.post("/cart/validate-coupon", couponController.validateCoupon);
 router.get("/admin/coupons", authenticateAdmin, couponController.listCouponsAdmin);

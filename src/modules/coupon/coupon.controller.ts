@@ -17,6 +17,29 @@ export async function listCouponsAdmin(
   }
 }
 
+export async function listPublicCoupons(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const now = new Date();
+    const list = await Coupon.find({
+      active: true,
+      $and: [
+        { $or: [{ startDate: null }, { startDate: { $lte: now } }] },
+        { $or: [{ endDate: null }, { endDate: { $gte: now } }] },
+      ],
+    })
+      .sort({ createdAt: -1 })
+      .select("code title description discountType discountValue minCartValue maxDiscount")
+      .lean();
+    res.json(list);
+  } catch (e) {
+    next(e);
+  }
+}
+
 export async function createCouponAdmin(
   req: Request,
   res: Response,
