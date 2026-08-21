@@ -177,20 +177,38 @@ export async function listProductsAdmin(
   }
 }
 
+async function findProductDoc(idOrSlug: string) {
+  if (mongoose.isValidObjectId(idOrSlug)) {
+    const doc = await Product.findById(idOrSlug);
+    if (doc) return doc;
+  }
+  return Product.findOne({ slug: idOrSlug.toLowerCase() });
+}
+
 export async function getProductByIdAdmin(
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<void> {
   try {
-    const { id } = req.params;
-    if (!mongoose.isValidObjectId(id)) throw new AppError(400, "Invalid id");
-    const doc = await Product.findById(id)
-      .populate("category", "name slug")
-      .populate("subCategory", "name slug")
-      .populate("collections", "name slug")
-      .populate("occasions", "name slug")
-      .populate("lookbooks", "title slug images coverImage");
+    const id = String(req.params.id || "");
+    let doc = null;
+    if (mongoose.isValidObjectId(id)) {
+      doc = await Product.findById(id)
+        .populate("category", "name slug")
+        .populate("subCategory", "name slug")
+        .populate("collections", "name slug")
+        .populate("occasions", "name slug")
+        .populate("lookbooks", "title slug images coverImage");
+    }
+    if (!doc) {
+      doc = await Product.findOne({ slug: id.toLowerCase() })
+        .populate("category", "name slug")
+        .populate("subCategory", "name slug")
+        .populate("collections", "name slug")
+        .populate("occasions", "name slug")
+        .populate("lookbooks", "title slug images coverImage");
+    }
     if (!doc) throw new AppError(404, "Product not found");
     res.json(doc);
   } catch (e) {
@@ -204,7 +222,7 @@ export async function getProductBySlug(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { slug } = req.params;
+    const slug = String(req.params.slug || "");
     const doc = await Product.findOne(publishedFilter({ slug }))
       .populate("category", "name slug")
       .populate("subCategory", "name slug")
@@ -224,9 +242,10 @@ export async function updateProduct(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { id } = req.params;
-    const doc = await Product.findByIdAndUpdate(id, req.body, { new: true });
-    if (!doc) throw new AppError(404, "Product not found");
+    const id = String(req.params.id || "");
+    const target = await findProductDoc(id);
+    if (!target) throw new AppError(404, "Product not found");
+    const doc = await Product.findByIdAndUpdate(target._id, req.body, { new: true });
     res.json(doc);
   } catch (e) {
     next(e);
@@ -239,10 +258,10 @@ export async function deleteProduct(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { id } = req.params;
-    if (!mongoose.isValidObjectId(id)) throw new AppError(400, "Invalid id");
-    const doc = await Product.findByIdAndDelete(id);
-    if (!doc) throw new AppError(404, "Product not found");
+    const id = String(req.params.id || "");
+    const target = await findProductDoc(id);
+    if (!target) throw new AppError(404, "Product not found");
+    await Product.findByIdAndDelete(target._id);
     res.json({ ok: true });
   } catch (e) {
     next(e);

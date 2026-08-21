@@ -56,10 +56,20 @@ export async function listLookbooksPublic(featured?: string) {
         ],
       },
       {
-        $or: [{ publishAt: null }, { publishAt: { $exists: false } }, { publishAt: { $lte: now } }],
+        $or: [
+          { publishAt: null },
+          { publishAt: "" },
+          { publishAt: { $exists: false } },
+          { publishAt: { $lte: now } },
+        ],
       },
       {
-        $or: [{ expireAt: null }, { expireAt: { $exists: false } }, { expireAt: { $gt: now } }],
+        $or: [
+          { expireAt: null },
+          { expireAt: "" },
+          { expireAt: { $exists: false } },
+          { expireAt: { $gt: now } },
+        ],
       },
     ],
   };
@@ -109,11 +119,32 @@ export async function listLookbooksAdmin(query: ListQuery) {
   };
 }
 
+async function findLookbookDoc(idOrSlug: string) {
+  if (mongoose.isValidObjectId(idOrSlug)) {
+    const doc = await Lookbook.findById(idOrSlug);
+    if (doc) return doc;
+  }
+  return Lookbook.findOne({ slug: idOrSlug.toLowerCase() });
+}
+
 export async function getLookbookById(id: string) {
-  if (!mongoose.isValidObjectId(id)) throw new AppError(400, "Invalid id");
-  const doc = await Lookbook.findById(id)
-    .populate("galleryImages.hotspots.product", "name slug price salePrice stock status images sku")
-    .populate("products", "name slug price salePrice stock status images");
+  let doc = null;
+  if (mongoose.isValidObjectId(id)) {
+    doc = await Lookbook.findById(id)
+      .populate(
+        "galleryImages.hotspots.product",
+        "name slug price salePrice stock status images sku"
+      )
+      .populate("products", "name slug price salePrice stock status images");
+  }
+  if (!doc) {
+    doc = await Lookbook.findOne({ slug: id.toLowerCase() })
+      .populate(
+        "galleryImages.hotspots.product",
+        "name slug price salePrice stock status images sku"
+      )
+      .populate("products", "name slug price salePrice stock status images");
+  }
   if (!doc) throw new AppError(404, "Lookbook not found");
   return doc;
 }
@@ -133,7 +164,7 @@ export async function getLookbookBySlug(slug: string) {
 }
 
 export async function updateLookbookDoc(id: string, body: LookbookBody) {
-  const doc = await Lookbook.findById(id);
+  const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
 
   if (body.title != null) doc.title = body.title.trim();
@@ -158,10 +189,16 @@ export async function updateLookbookDoc(id: string, body: LookbookBody) {
     };
   }
   if (body.publishAt !== undefined) {
-    doc.publishAt = body.publishAt ? new Date(body.publishAt) : undefined;
+    doc.publishAt =
+      body.publishAt && !isNaN(new Date(body.publishAt).getTime())
+        ? new Date(body.publishAt)
+        : (null as unknown as Date);
   }
   if (body.expireAt !== undefined) {
-    doc.expireAt = body.expireAt ? new Date(body.expireAt) : undefined;
+    doc.expireAt =
+      body.expireAt && !isNaN(new Date(body.expireAt).getTime())
+        ? new Date(body.expireAt)
+        : (null as unknown as Date);
   }
 
   const status = resolveStatus(body);
@@ -181,13 +218,14 @@ export async function updateLookbookDoc(id: string, body: LookbookBody) {
 }
 
 export async function deleteLookbookDoc(id: string) {
-  const doc = await Lookbook.findByIdAndDelete(id);
+  const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
+  await doc.deleteOne();
   return { ok: true };
 }
 
 export async function addLookbookImage(id: string, image: ImageBody) {
-  const doc = await Lookbook.findById(id);
+  const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
   const sortOrder = image.sortOrder ?? doc.galleryImages.length;
   doc.galleryImages.push({
@@ -202,7 +240,7 @@ export async function addLookbookImage(id: string, image: ImageBody) {
 }
 
 export async function deleteLookbookImage(id: string, imageId: string) {
-  const doc = await Lookbook.findById(id);
+  const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
   const img = doc.galleryImages.id(imageId);
   if (!img) throw new AppError(404, "Image not found");
@@ -213,7 +251,7 @@ export async function deleteLookbookImage(id: string, imageId: string) {
 }
 
 export async function reorderLookbookImages(id: string, imageIds: string[]) {
-  const doc = await Lookbook.findById(id);
+  const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
   imageIds.forEach((imgId, index) => {
     const img = doc.galleryImages.id(imgId);
@@ -225,7 +263,7 @@ export async function reorderLookbookImages(id: string, imageIds: string[]) {
 }
 
 export async function addHotspot(id: string, imageId: string, hotspot: HotspotBody) {
-  const doc = await Lookbook.findById(id);
+  const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
   const img = doc.galleryImages.id(imageId);
   if (!img) throw new AppError(404, "Image not found");
@@ -236,7 +274,7 @@ export async function addHotspot(id: string, imageId: string, hotspot: HotspotBo
   } as never);
   pushAudit(doc, "hotspot_added", { imageId, product: hotspot.product });
   await doc.save();
-  return getLookbookById(id);
+  return getLookbookById(String(doc._id));
 }
 
 export async function updateHotspot(
@@ -245,8 +283,12 @@ export async function updateHotspot(
   hotspotId: string,
   hotspot: Partial<HotspotBody>
 ) {
+  const targetDoc = await findLookbookDoc(id);
+  if (!targetDoc) throw new AppError(404, "Not found");
+  const realId = targetDoc._id;
+
   if (
-    !mongoose.isValidObjectId(id) ||
+    !mongoose.isValidObjectId(realId) ||
     !mongoose.isValidObjectId(imageId) ||
     !mongoose.isValidObjectId(hotspotId)
   ) {
@@ -273,7 +315,7 @@ export async function updateHotspot(
   }
 
   if (!Object.keys($set).length) {
-    return getLookbookById(id);
+    return getLookbookById(String(realId));
   }
 
   // Atomic update avoids VersionError when many drag events race.
@@ -292,7 +334,7 @@ export async function updateHotspot(
   }
 
   const updated = await Lookbook.findOneAndUpdate(
-    { _id: id, "galleryImages._id": imageId, "galleryImages.hotspots._id": hotspotId },
+    { _id: realId, "galleryImages._id": imageId, "galleryImages.hotspots._id": hotspotId },
     update,
     {
       new: true,
@@ -307,11 +349,11 @@ export async function updateHotspot(
 
   // Position drags: skip heavy populate round-trip
   if (positionOnly) return updated;
-  return getLookbookById(id);
+  return getLookbookById(String(realId));
 }
 
 export async function deleteHotspot(id: string, imageId: string, hotspotId: string) {
-  const doc = await Lookbook.findById(id);
+  const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
   const img = doc.galleryImages.id(imageId);
   if (!img) throw new AppError(404, "Image not found");
@@ -320,12 +362,13 @@ export async function deleteHotspot(id: string, imageId: string, hotspotId: stri
   spot.deleteOne();
   pushAudit(doc, "hotspot_deleted", { imageId, hotspotId });
   await doc.save();
-  return getLookbookById(id);
+  return getLookbookById(String(doc._id));
 }
 
 export async function duplicateLookbook(id: string) {
-  const source = await Lookbook.findById(id).lean();
-  if (!source) throw new AppError(404, "Not found");
+  const sourceDoc = await findLookbookDoc(id);
+  if (!sourceDoc) throw new AppError(404, "Not found");
+  const source = sourceDoc.toObject();
   const baseSlug = `${source.slug}-copy`;
   let slug = baseSlug;
   let n = 1;
@@ -347,7 +390,7 @@ export async function duplicateLookbook(id: string) {
     active: false,
     featured: false,
     analytics: { views: 0, clicks: 0, productClicks: 0, conversions: 0 },
-    auditLog: [{ action: "duplicated", at: new Date(), meta: { from: id } }],
+    auditLog: [{ action: "duplicated", at: new Date(), meta: { from: String(sourceDoc._id) } }],
   });
   return clone;
 }
