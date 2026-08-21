@@ -353,6 +353,8 @@ router.get("/admin/audit-logs", authenticateAdmin, auditController.getAuditLogsA
 
 // --- PRICING ENGINE & SLABS ---
 router.post("/cart/calculate", pricingController.calculateCart);
+router.post("/cart/validate-batch", productController.validateCartBatch);
+router.post("/cart/validate", productController.validateCartBatch);
 router.get("/admin/pricing-settings", authenticateAdmin, pricingController.getPricingSettingsAdmin);
 router.put(
   "/admin/pricing-settings",

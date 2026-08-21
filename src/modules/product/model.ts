@@ -76,6 +76,11 @@ productSchema.index({ trendingScore: -1 });
 productSchema.index({ soldCount: -1 });
 productSchema.index({ createdAt: -1 });
 productSchema.index({ sections: 1 });
+productSchema.index({ status: 1, stock: 1, category: 1 });
+productSchema.index({ status: 1, stock: 1, subCategory: 1 });
+productSchema.index({ status: 1, stock: 1, collections: 1 });
+productSchema.index({ status: 1, stock: 1, price: 1 });
+productSchema.index({ name: "text", tags: "text" });
 
 export type ProductDoc = InferSchemaType<typeof productSchema> & {
   _id: mongoose.Types.ObjectId;

@@ -118,6 +118,9 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
 
     const [items, total] = await Promise.all([
       Product.find(filter)
+        .select(
+          "_id name slug category subCategory images price salePrice stock tags featured trending masterpiece newArrival color createdAt sku"
+        )
         .sort(sortSpec)
         .skip((p - 1) * l)
         .limit(l)
@@ -133,6 +136,49 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
       page: p,
       pages: Math.ceil(total / l) || 0,
     });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function validateCartBatch(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { items } = req.body as { items: Array<{ id?: string; slug?: string }> };
+    if (!Array.isArray(items) || items.length === 0) {
+      res.json([]);
+      return;
+    }
+    const slugs = items.map((i) => i.slug).filter(Boolean) as string[];
+    const ids = items
+      .map((i) => i.id)
+      .filter((id) => id && mongoose.isValidObjectId(id)) as string[];
+
+    const docs = await Product.find({
+      $or: [{ slug: { $in: slugs } }, { _id: { $in: ids } }],
+    })
+      .select("_id slug name price salePrice stock status")
+      .lean();
+
+    const result = items.map((item) => {
+      const match = docs.find((d) => d.slug === item.slug || String(d._id) === item.id);
+      if (!match) return { id: item.id, slug: item.slug, stock: 0, price: 0, valid: false };
+      const effectivePrice =
+        match.salePrice != null && match.salePrice < match.price ? match.salePrice : match.price;
+      return {
+        id: String(match._id),
+        slug: match.slug,
+        stock: match.stock ?? 0,
+        price: effectivePrice,
+        status: match.status,
+        valid: match.status === "published" && (match.stock ?? 0) > 0,
+      };
+    });
+
+    res.json(result);
   } catch (e) {
     next(e);
   }
