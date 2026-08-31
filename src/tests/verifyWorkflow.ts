@@ -217,10 +217,14 @@ async function verifyAll() {
   }
 
   // Process Refund for COD return
-  await refundReturn(returnDoc._id.toString(), {
-    refundMethod: "UPI",
-    refundAccountReference: "tanja@upi",
-  });
+  await refundReturn(
+    returnDoc._id.toString(),
+    {
+      refundMethod: "UPI",
+      refundAccountReference: "tanja@upi",
+    },
+    "ADMIN"
+  );
 
   const finalizedReturn = await Return.findById(returnDoc._id);
   const finalizedOrder = await Order.findById(deliveredCod._id);

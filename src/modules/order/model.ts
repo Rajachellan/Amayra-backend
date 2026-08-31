@@ -10,6 +10,11 @@ const orderItemSchema = new Schema(
     quantity: { type: Number, required: true, min: 1 },
     lineTotal: { type: Number, required: true },
     image: { type: String },
+    size: { type: String },
+    returnedQuantity: { type: Number, default: 0, min: 0 },
+    exchangedQuantity: { type: Number, default: 0, min: 0 },
+    lockedQuantity: { type: Number, default: 0, min: 0 },
+    futureReversePickupAllowed: { type: Boolean, default: true },
   },
   { _id: false }
 );
@@ -72,15 +77,26 @@ export const SHIPPING_STATUS_VALUES = [
 export const RETURN_STATUS_VALUES = [
   "NOT_REQUESTED",
   "REQUESTED",
+  "UNDER_REVIEW",
   "APPROVED",
   "REJECTED",
+  "PICKUP_REQUESTED",
   "PICKUP_SCHEDULED",
+  "PICKUP_FAILED",
   "PICKED_UP",
-  "RECEIVED",
-  "QUALITY_CHECK",
-  "ACCEPTED",
-  "REJECTED_AFTER_INSPECTION",
+  "IN_TRANSIT",
+  "RECEIVED_AT_WAREHOUSE",
+  "QC_IN_PROGRESS",
+  "QC_APPROVED",
+  "QC_REJECTED",
+  "SETTLEMENT_PROCESSING",
+  "REFUND_ISSUED",
+  "EXCHANGE_PROCESSING",
+  "REPLACEMENT_SHIPPED",
+  "VOUCHER_ISSUED",
   "COMPLETED",
+  "CANCELLED",
+  "CLOSED",
 ] as const;
 
 export const REFUND_STATUS_VALUES = [

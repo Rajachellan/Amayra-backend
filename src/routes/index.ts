@@ -223,10 +223,20 @@ router.put(
 router.get("/admin/payments", authenticateAdmin, paymentAdminController.listPaymentsAdmin);
 router.get("/admin/payments/:id", authenticateAdmin, paymentAdminController.getPaymentAdmin);
 
-// Returns API
+// Returns & Exchange Management API
+router.get("/returns/reasons", returnController.getReasons);
+router.get("/returns/eligible-orders", authenticateCustomer, returnController.getEligibleOrders);
+router.get(
+  "/returns/eligibility/:orderId",
+  authenticateCustomer,
+  returnController.getItemEligibility
+);
 router.post("/returns", authenticateCustomer, returnController.postCreateReturnRequest);
 router.get("/returns", authenticateCustomer, returnController.getReturnList);
 router.get("/returns/:id", authenticateCustomer, returnController.getReturnById);
+
+router.get("/credits/my-credits", authenticateCustomer, returnController.getCustomerCredits);
+
 router.get("/admin/returns", authenticateAdmin, returnController.getReturnList);
 router.get("/admin/returns/:id", authenticateAdmin, returnController.getReturnById);
 router.post(
@@ -242,10 +252,22 @@ router.post(
   returnController.postRejectReturn
 );
 router.post(
+  "/admin/returns/:id/reschedule-pickup",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  returnController.postReschedulePickup
+);
+router.post(
   "/admin/returns/:id/receive",
   authenticateAdmin,
   requirePermission("orders:write"),
   returnController.postReceiveReturn
+);
+router.post(
+  "/admin/returns/:id/qc",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  returnController.postInspectReturn
 );
 router.post(
   "/admin/returns/:id/inspect",
@@ -254,10 +276,36 @@ router.post(
   returnController.postInspectReturn
 );
 router.post(
-  "/admin/returns/:id/refund",
+  "/admin/returns/:id/issue-credit",
   authenticateAdmin,
   requirePermission("orders:write"),
-  returnController.postRefundReturn
+  returnController.postIssueStoreCredit
+);
+router.post(
+  "/admin/returns/:id/issue-exchange-voucher",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  returnController.postIssueExchangeVoucher
+);
+router.post(
+  "/admin/returns/:id/create-replacement",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  returnController.postCreateReplacementOrder
+);
+
+router.get("/admin/reasons", authenticateAdmin, returnController.getAdminReasons);
+router.post(
+  "/admin/reasons",
+  authenticateAdmin,
+  requirePermission("homepage:write"),
+  returnController.createAdminReason
+);
+router.patch(
+  "/admin/reasons/:id",
+  authenticateAdmin,
+  requirePermission("homepage:write"),
+  returnController.updateAdminReason
 );
 
 // Inventory API

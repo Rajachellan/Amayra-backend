@@ -1,13 +1,17 @@
 import mongoose from "mongoose";
-import { Return } from "./model.js";
-import { Order } from "../order/model.js";
-import { Payment } from "../payment/model.js";
 import { AppError } from "../../utils/AppError.js";
-import { recordOrderEvent } from "../order/order.service.js";
-import * as shiprocketClient from "../shipping/shiprocket.client.js";
-import { restockReturnedItems, recordDamagedReturn } from "../inventory/inventory.service.js";
-import * as refundService from "../refund/refund.service.js";
 import { logger } from "../../config/logger.js";
+import { Order } from "../order/model.js";
+import { Product } from "../product/model.js";
+import { Return } from "./model.js";
+import { ReturnRequestEvidence } from "./evidence.model.js";
+import { ReturnStatusHistory } from "./history.model.js";
+import { transitionReturnStatus } from "./statemachine.service.js";
+import { calculateOrderItemsEligibility } from "./eligibility.service.js";
+import { StoreCredit } from "../credit/model.js";
+import { ExchangeVoucher } from "../voucher/model.js";
+import * as shiprocketClient from "../../integrations/shiprocket/service.js";
+import { restockReturnedItems, recordDamagedReturn } from "../inventory/inventory.service.js";
 
 function todayReturnPrefix(): string {
   const d = new Date();
@@ -27,15 +31,31 @@ export async function generateReturnNumber(): Promise<string> {
   return `${prefix}${seq}`;
 }
 
+export async function generateCreditCode(prefix = "SC"): Promise<string> {
+  const rand = Math.random().toString(36).substring(2, 7).toUpperCase();
+  return `${prefix}-${todayReturnPrefix()}-${rand}`;
+}
+
 /**
- * Customer initiates a return request.
+ * Customer initiates a return or exchange request.
  */
 export async function createReturnRequest(args: {
   customerId: string;
   orderId: string;
-  items: { product: string; quantity: number }[];
-  reason: "DONT_LIKE" | "DAMAGED" | "WRONG_PRODUCT" | "QUALITY_ISSUE" | "SIZE_ISSUE" | "OTHER";
+  items: { product: string; quantity: number; size?: string }[];
+  reason: string;
+  reasonTitle?: string;
   description?: string;
+  requestType?: "RETURN" | "EXCHANGE";
+  exchangeDetails?: { requestedVariant?: string; preferredSize?: string; notes?: string };
+  bankDetails?: {
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    bankName?: string;
+    upiId?: string;
+  };
+  evidenceFiles?: { fileUrl: string; fileType: "IMAGE" | "VIDEO"; mimeType?: string }[];
 }): Promise<any> {
   const isObjectId = mongoose.Types.ObjectId.isValid(args.orderId);
   const order = await Order.findOne(
@@ -43,112 +63,147 @@ export async function createReturnRequest(args: {
       ? { $or: [{ _id: args.orderId }, { orderNumber: args.orderId }] }
       : { orderNumber: args.orderId }
   );
+
   if (!order) throw new AppError(404, "Order not found");
 
   if (order.customer.toString() !== args.customerId) {
     throw new AppError(403, "You do not own this order");
   }
 
-  if (order.orderStatus !== "DELIVERED") {
-    throw new AppError(400, "Only delivered orders are eligible for return");
-  }
+  // Calculate eligibility
+  const eligibility = await calculateOrderItemsEligibility(order);
 
-  // Enforce 15-day return policy
-  const diff = Date.now() - new Date(order.updatedAt || order.createdAt).getTime();
-  const returnWindowLimit = 15 * 24 * 60 * 60 * 1000; // 15 days
-  if (diff > returnWindowLimit) {
-    throw new AppError(400, "Return window of 15 days has expired");
-  }
-
-  // Prevent duplicate returns
-  const activeReturn = await Return.findOne({ orderId: order._id, status: { $ne: "REJECTED" } });
-  if (activeReturn) {
-    throw new AppError(400, "A return request already exists for this order");
-  }
-
-  // Validate items
   const returnItems: any[] = [];
-  let refundAmount = 0;
+  let calculatedSettlementAmount = 0;
 
-  for (const requested of args.items) {
-    const orderItem = order.items.find((it) => it.product.toString() === requested.product);
-    if (!orderItem) {
-      throw new AppError(400, `Product not found in this order: ${requested.product}`);
+  for (const reqItem of args.items) {
+    const itemEligibility = eligibility.find((e) => e.productId === reqItem.product);
+    if (!itemEligibility) {
+      throw new AppError(400, `Product not found in this order: ${reqItem.product}`);
     }
-    if (requested.quantity > orderItem.quantity) {
+
+    if (!itemEligibility.futureReversePickupAllowed) {
       throw new AppError(
         400,
-        `Cannot return more quantity than purchased for product: ${orderItem.name}`
+        `Item '${itemEligibility.name}' is permanently blocked from returns/exchanges`
       );
     }
+
+    const reqType = args.requestType || "RETURN";
+    if (reqType === "RETURN" && !itemEligibility.returnEligible) {
+      throw new AppError(
+        400,
+        itemEligibility.reason ||
+          `Item '${itemEligibility.name}' is not eligible for return (24-hour limit from delivery)`
+      );
+    }
+    if (reqType === "EXCHANGE" && !itemEligibility.exchangeEligible) {
+      throw new AppError(
+        400,
+        itemEligibility.reason ||
+          `Item '${itemEligibility.name}' is not eligible for exchange (5-day limit from delivery)`
+      );
+    }
+
+    if (reqItem.quantity > itemEligibility.remainingEligibleQuantity) {
+      throw new AppError(
+        400,
+        `Requested quantity (${reqItem.quantity}) exceeds remaining eligible quantity (${itemEligibility.remainingEligibleQuantity}) for item: ${itemEligibility.name}`
+      );
+    }
+
+    const orderItem = order.items.find((it) => it.product.toString() === reqItem.product);
+    const unitPrice = orderItem ? orderItem.unitPrice : 0;
+
     returnItems.push({
-      product: orderItem.product,
-      name: orderItem.name,
-      sku: orderItem.sku,
-      quantity: requested.quantity,
-      unitPrice: orderItem.unitPrice,
+      product: reqItem.product,
+      name: itemEligibility.name,
+      sku: itemEligibility.sku,
+      size: reqItem.size || (orderItem as any)?.size,
+      quantity: reqItem.quantity,
+      unitPrice,
     });
-    refundAmount += orderItem.unitPrice * requested.quantity;
+
+    calculatedSettlementAmount += unitPrice * reqItem.quantity;
   }
 
   const returnNumber = await generateReturnNumber();
 
-  // Create Return document
+  // Create Return Document
   const returnDoc = await Return.create({
     returnNumber,
     orderId: order._id,
     customerId: order.customer,
+    requestType: args.requestType || "RETURN",
     items: returnItems,
     reason: args.reason,
+    reasonTitle: args.reasonTitle || args.reason,
     description: args.description,
+    exchangeDetails: args.exchangeDetails || null,
+    bankDetails: args.bankDetails || null,
     status: "REQUESTED",
-    refundInformation: {
+    settlementDetails: {
+      settlementAmount: calculatedSettlementAmount,
       refundMethod: order.paymentMethod === "COD" ? "BANK" : "RAZORPAY",
-      refundAmount,
-      refundStatus: "PENDING",
     },
   });
 
-  // Update order return status
-  const previousStatus = order.returnStatus;
+  // Lock quantity on order items
+  for (const reqItem of args.items) {
+    const orderItem = order.items.find((it) => it.product.toString() === reqItem.product);
+    if (orderItem) {
+      (orderItem as any).lockedQuantity =
+        ((orderItem as any).lockedQuantity || 0) + reqItem.quantity;
+    }
+  }
+
   order.returnStatus = "REQUESTED";
   await order.save();
 
-  // Log audit log & Socket.IO updates
-  await recordOrderEvent({
-    orderId: order._id,
-    eventType: "RETURN_REQUESTED",
-    previousStatus,
+  // Save Evidence Files
+  if (args.evidenceFiles && args.evidenceFiles.length > 0) {
+    const evidenceDocs = args.evidenceFiles.map((f) => ({
+      returnRequestId: returnDoc._id,
+      fileUrl: f.fileUrl,
+      fileType: f.fileType,
+      mimeType: f.mimeType,
+      uploadedBy: "CUSTOMER",
+    }));
+    await ReturnRequestEvidence.insertMany(evidenceDocs);
+  }
+
+  // Write History Audit Log
+  await ReturnStatusHistory.create({
+    returnRequestId: returnDoc._id,
+    previousStatus: "NONE",
     newStatus: "REQUESTED",
-    source: "CUSTOMER",
-    metadata: {
-      returnId: returnDoc._id.toString(),
-      returnNumber,
-    },
+    changedBy: order.customer,
+    changedByRole: "CUSTOMER",
+    notes: `Customer requested ${args.requestType || "RETURN"} for order ${order.orderNumber}`,
+    metadata: { items: returnItems, reason: args.reason },
   });
 
   return returnDoc;
 }
 
 /**
- * Admin approves return request and books a reverse pickup in Shiprocket.
+ * Admin approves return request and books reverse pickup in Shiprocket.
  */
-export async function approveReturn(returnId: string, _adminId: string): Promise<any> {
+export async function approveReturn(returnId: string, adminId: string): Promise<any> {
   const returnDoc = await Return.findById(returnId);
   if (!returnDoc) throw new AppError(404, "Return request not found");
 
-  if (returnDoc.status !== "REQUESTED") {
-    throw new AppError(400, `Return cannot be approved in its current status: ${returnDoc.status}`);
+  if (returnDoc.status !== "REQUESTED" && returnDoc.status !== "UNDER_REVIEW") {
+    throw new AppError(400, `Cannot approve return request in current status: ${returnDoc.status}`);
   }
 
   const order = await Order.findById(returnDoc.orderId).populate("customer", "email name phone");
-  if (!order) throw new AppError(404, "Order not found");
+  if (!order) throw new AppError(404, "Associated order not found");
 
-  // Initiate reverse pickup booking with Shiprocket
   const cust = order.customer as any;
   const customerEmail = cust?.email?.trim() || "customer@mairiijewels.com";
-
   const returnDate = new Date(returnDoc.createdAt).toISOString().slice(0, 10);
+
   const itemsPayload = returnDoc.items.map((it, idx) => ({
     name: it.name.slice(0, 200),
     sku: it.sku || `ret-${idx + 1}`,
@@ -156,7 +211,6 @@ export async function approveReturn(returnId: string, _adminId: string): Promise
     selling_price: String(it.unitPrice),
   }));
 
-  // Warehouse address details
   const warehousePayload = {
     shipping_customer_name: "Mairii Jewels Warehouse",
     shipping_address: "123 Warehouse St, Industrial Area",
@@ -181,18 +235,30 @@ export async function approveReturn(returnId: string, _adminId: string): Promise
     ...warehousePayload,
     order_items: itemsPayload,
     payment_method: "Prepaid",
-    sub_total: returnDoc.refundInformation?.refundAmount || 0,
+    sub_total: returnDoc.settlementDetails?.settlementAmount || 0,
     length: 10,
     breadth: 10,
     height: 5,
     weight: 0.35,
   };
 
-  let reverseDetails = {
+  let reverseDetails: any = {
+    courierProvider: "SHIPROCKET",
     reverseShipmentId: "",
     reverseAwb: "",
     reverseCourier: "",
     reverseTrackingUrl: "",
+    pickupAttemptCount: 1,
+    maxPickupAttempts: 3,
+    rescheduleAllowed: true,
+    attemptHistory: [
+      {
+        attemptNumber: 1,
+        date: new Date(),
+        reason: "Pickup initiated upon approval",
+        status: "SCHEDULED",
+      },
+    ],
   };
 
   try {
@@ -200,134 +266,261 @@ export async function approveReturn(returnId: string, _adminId: string): Promise
     const srRes: any = await shiprocketClient.createReturnOrder(reverseAdhocPayload);
     const shipmentId = String(srRes.shipment_id || srRes.payload?.shipment_id || "");
     const awb = String(srRes.awb_code || srRes.payload?.awb_code || "");
-    const courier = String(srRes.courier_name || srRes.payload?.courier_name || "Courier");
+    const courier = String(
+      srRes.courier_name || srRes.payload?.courier_name || "Shiprocket Courier"
+    );
 
-    if (shipmentId) {
-      reverseDetails = {
-        reverseShipmentId: shipmentId,
-        reverseAwb: awb,
-        reverseCourier: courier,
-        reverseTrackingUrl: awb ? `https://shiprocket.co/tracking/${awb}` : "",
-      };
-    }
+    reverseDetails.reverseShipmentId = shipmentId;
+    reverseDetails.reverseAwb = awb;
+    reverseDetails.reverseCourier = courier;
+    reverseDetails.reverseTrackingUrl = awb ? `https://shiprocket.co/tracking/${awb}` : "";
+    reverseDetails.courierStatus = "PICKUP_SCHEDULED";
   } catch (err: any) {
     logger.error(
       { err },
-      "Failed booking reverse pickup with Shiprocket. Approving anyway without AWB."
+      "Failed booking reverse pickup with Shiprocket. Approving request anyway."
     );
   }
 
-  // Update return document
-  returnDoc.status = "APPROVED";
-  returnDoc.pickupDetails = reverseDetails as any;
+  returnDoc.pickupDetails = reverseDetails;
   await returnDoc.save();
 
-  // Update order return status
-  const prevReturnStatus = order.returnStatus;
-  order.returnStatus = "APPROVED";
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "APPROVED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Admin approved return request",
+  });
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "PICKUP_SCHEDULED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Reverse pickup scheduled with courier",
+  });
+
+  order.returnStatus = "PICKUP_SCHEDULED";
   await order.save();
 
-  await recordOrderEvent({
-    orderId: order._id,
-    eventType: "RETURN_APPROVED",
-    previousStatus: prevReturnStatus,
-    newStatus: "APPROVED",
-    source: "ADMIN",
-    metadata: {
-      returnId: returnDoc._id.toString(),
-      reverseShipmentId: reverseDetails.reverseShipmentId,
-    },
+  return Return.findById(returnDoc._id);
+}
+
+/**
+ * Admin rejects a return request.
+ */
+export async function rejectReturn(
+  returnId: string,
+  args: { rejectionReason: string; rejectionNotes?: string } | string,
+  adminId: string
+): Promise<any> {
+  const returnDoc = await Return.findById(returnId);
+  if (!returnDoc) throw new AppError(404, "Return request not found");
+
+  const rejectionReason = typeof args === "string" ? args : args.rejectionReason;
+  const rejectionNotes = typeof args === "string" ? "" : args.rejectionNotes || "";
+
+  if (!rejectionReason) {
+    throw new AppError(400, "Rejection reason is required");
+  }
+
+  const order = await Order.findById(returnDoc.orderId);
+  if (!order) throw new AppError(404, "Associated order not found");
+
+  // Release locked quantity on order items
+  for (const item of returnDoc.items) {
+    const orderItem = order.items.find((it) => it.product.toString() === item.product.toString());
+    if (orderItem) {
+      (orderItem as any).lockedQuantity = Math.max(
+        0,
+        ((orderItem as any).lockedQuantity || 0) - item.quantity
+      );
+    }
+  }
+
+  returnDoc.rejectionDetails = {
+    rejectionReason,
+    rejectionNotes,
+    rejectedBy: mongoose.Types.ObjectId.isValid(adminId)
+      ? new mongoose.Types.ObjectId(adminId)
+      : undefined,
+    rejectedAt: new Date(),
+  };
+
+  await returnDoc.save();
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "REJECTED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: `Return rejected by admin: ${rejectionReason}`,
+  });
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "CLOSED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Case closed after rejection",
+  });
+
+  order.returnStatus = "REJECTED";
+  await order.save();
+
+  return returnDoc;
+}
+
+/**
+ * Reschedule pickup or handle pickup failure up to 3 attempts.
+ */
+export async function reschedulePickup(
+  returnId: string,
+  args: { reason?: string },
+  adminId: string
+): Promise<any> {
+  const returnDoc = await Return.findById(returnId);
+  if (!returnDoc) throw new AppError(404, "Return request not found");
+
+  const pickup = returnDoc.pickupDetails || ({} as any);
+  const currentAttempts = pickup.pickupAttemptCount || 0;
+  const maxAttempts = pickup.maxPickupAttempts || 3;
+
+  if (currentAttempts >= maxAttempts) {
+    pickup.rescheduleAllowed = false;
+    pickup.pickupAttemptCount = currentAttempts;
+    pickup.attemptHistory.push({
+      attemptNumber: currentAttempts,
+      date: new Date(),
+      reason: args.reason || "Maximum pickup attempt limit (3) reached",
+      status: "FAILED_FINAL",
+    });
+    returnDoc.pickupDetails = pickup;
+    await returnDoc.save();
+
+    const order = await Order.findById(returnDoc.orderId);
+    if (order) {
+      for (const item of returnDoc.items) {
+        const orderItem = order.items.find(
+          (it) => it.product.toString() === item.product.toString()
+        );
+        if (orderItem) {
+          (orderItem as any).lockedQuantity = Math.max(
+            0,
+            ((orderItem as any).lockedQuantity || 0) - item.quantity
+          );
+        }
+      }
+      order.returnStatus = "PICKUP_FAILED";
+      await order.save();
+    }
+
+    await transitionReturnStatus({
+      returnId: returnDoc._id,
+      targetStatus: "PICKUP_FAILED",
+      changedBy: adminId,
+      changedByRole: "ADMIN",
+      notes: "Pickup failed 3 times. Maximum attempts reached.",
+    });
+
+    await transitionReturnStatus({
+      returnId: returnDoc._id,
+      targetStatus: "CLOSED",
+      changedBy: adminId,
+      changedByRole: "ADMIN",
+      notes: "Case closed automatically after 3 failed pickup attempts.",
+    });
+
+    throw new AppError(400, "Maximum 3 pickup attempts reached. Request has been closed.");
+  }
+
+  const newAttemptCount = currentAttempts + 1;
+  pickup.pickupAttemptCount = newAttemptCount;
+  pickup.rescheduleAllowed = newAttemptCount < maxAttempts;
+  pickup.attemptHistory.push({
+    attemptNumber: newAttemptCount,
+    date: new Date(),
+    reason: args.reason || "Pickup rescheduled by admin",
+    status: "RESCHEDULED",
+  });
+
+  returnDoc.pickupDetails = pickup;
+  await returnDoc.save();
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "PICKUP_SCHEDULED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: `Pickup rescheduled (Attempt ${newAttemptCount} of ${maxAttempts})`,
   });
 
   return returnDoc;
 }
 
 /**
- * Admin rejects return request.
+ * Admin marks returned shipment as physically received at warehouse.
  */
-export async function rejectReturn(returnId: string, _adminId: string): Promise<any> {
+export async function receiveReturn(
+  returnId: string,
+  adminId: string,
+  args?: { warehouseNotes?: string }
+): Promise<any> {
   const returnDoc = await Return.findById(returnId);
   if (!returnDoc) throw new AppError(404, "Return request not found");
 
-  if (returnDoc.status !== "REQUESTED") {
-    throw new AppError(400, "Only requested returns can be rejected");
-  }
-
-  returnDoc.status = "REJECTED";
+  returnDoc.receivingDetails = {
+    receivedBy: mongoose.Types.ObjectId.isValid(adminId)
+      ? new mongoose.Types.ObjectId(adminId)
+      : undefined,
+    receivedAt: new Date(),
+    warehouseNotes: args?.warehouseNotes || "Physically received at warehouse",
+  };
   await returnDoc.save();
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "RECEIVED_AT_WAREHOUSE",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Package received at warehouse",
+  });
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "QC_IN_PROGRESS",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Quality Check initiated",
+  });
 
   const order = await Order.findById(returnDoc.orderId);
   if (order) {
-    const prevStatus = order.returnStatus;
-    order.returnStatus = "REJECTED";
+    order.returnStatus = "RECEIVED_AT_WAREHOUSE";
     await order.save();
-
-    await recordOrderEvent({
-      orderId: order._id,
-      eventType: "RETURN_REJECTED",
-      previousStatus: prevStatus,
-      newStatus: "REJECTED",
-      source: "ADMIN",
-      metadata: { returnId },
-    });
   }
 
-  return returnDoc;
+  return Return.findById(returnDoc._id);
 }
 
 /**
- * Admin marks returned shipment as physically received.
+ * Perform Quality Check (QC) on returned items.
  */
-export async function receiveReturn(returnId: string, _adminId: string): Promise<any> {
-  const returnDoc = await Return.findById(returnId);
-  if (!returnDoc) throw new AppError(404, "Return request not found");
-
-  const allowed = ["APPROVED", "PICKUP_SCHEDULED", "PICKED_UP", "IN_TRANSIT"];
-  if (!allowed.includes(returnDoc.status)) {
-    throw new AppError(400, `Cannot mark return received from status ${returnDoc.status}`);
-  }
-
-  returnDoc.status = "RECEIVED";
-  await returnDoc.save();
-
-  const order = await Order.findById(returnDoc.orderId);
-  if (order) {
-    const prevStatus = order.returnStatus;
-    order.returnStatus = "RECEIVED";
-    await order.save();
-
-    await recordOrderEvent({
-      orderId: order._id,
-      eventType: "RETURN_RECEIVED",
-      previousStatus: prevStatus,
-      newStatus: "RECEIVED",
-      source: "ADMIN",
-      metadata: { returnId },
-    });
-  }
-
-  return returnDoc;
-}
-
-/**
- * Admin performs inspection of returned items.
- * Executes inventory adjustments (available stock increment vs damaged record) in a transaction.
- */
-export async function inspectReturn(
+export async function qcInspectReturn(
   returnId: string,
   args: {
     condition: "GOOD" | "DAMAGED" | "USED" | "MISSING_PARTS";
-    result: "ACCEPTED" | "REJECTED";
+    result: "QC_APPROVED" | "QC_REJECTED" | "ACCEPTED" | "REJECTED";
+    faultSource?: "OUR_FAULT" | "CUSTOMER_FAULT" | "COURIER_FAULT";
+    qcNotes?: string;
     comment?: string;
+    qcImages?: string[];
   },
   adminId: string
 ): Promise<any> {
   const returnDoc = await Return.findById(returnId);
   if (!returnDoc) throw new AppError(404, "Return request not found");
-
-  if (returnDoc.status !== "RECEIVED" && returnDoc.status !== "QUALITY_CHECK") {
-    throw new AppError(400, "Quality check can only be done on RECEIVED returns");
-  }
 
   const order = await Order.findById(returnDoc.orderId);
   if (!order) throw new AppError(404, "Associated order not found");
@@ -335,32 +528,102 @@ export async function inspectReturn(
   const session = await mongoose.startSession();
   session.startTransaction();
 
+  const isApproved = args.result === "QC_APPROVED" || args.result === "ACCEPTED";
+  const qcResult = isApproved ? "QC_APPROVED" : "QC_REJECTED";
+
   try {
-    returnDoc.inspectionResult = {
+    returnDoc.qcDetails = {
       condition: args.condition,
-      result: args.result,
-      comment: args.comment || "",
-      inspectedBy: new mongoose.Types.ObjectId(adminId),
-      inspectedAt: new Date(),
+      result: qcResult as any,
+      faultSource: args.faultSource || "NONE",
+      qcNotes: args.qcNotes || args.comment || "",
+      qcImages: args.qcImages || [],
+      performedBy: mongoose.Types.ObjectId.isValid(adminId)
+        ? new mongoose.Types.ObjectId(adminId)
+        : undefined,
+      performedAt: new Date(),
     };
 
-    const _prevReturnStatus = returnDoc.status;
-    const prevOrderReturnStatus = order.returnStatus;
+    if (isApproved) {
+      await transitionReturnStatus({
+        returnId: returnDoc._id,
+        targetStatus: "QC_APPROVED",
+        changedBy: adminId,
+        changedByRole: "ADMIN",
+        notes: `QC Approved. Condition: ${args.condition}`,
+        session,
+      });
 
-    if (args.result === "ACCEPTED") {
-      returnDoc.status = "ACCEPTED";
-      order.returnStatus = "ACCEPTED";
-      order.orderStatus = "COMPLETED"; // Restocking completes the order lifecycle
+      await transitionReturnStatus({
+        returnId: returnDoc._id,
+        targetStatus: "SETTLEMENT_PROCESSING",
+        changedBy: adminId,
+        changedByRole: "ADMIN",
+        notes: "Moved to settlement processing",
+        session,
+      });
 
-      // Adjust inventory ledger
+      for (const item of returnDoc.items) {
+        const orderItem = order.items.find(
+          (it) => it.product.toString() === item.product.toString()
+        );
+        if (orderItem) {
+          (orderItem as any).lockedQuantity = Math.max(
+            0,
+            ((orderItem as any).lockedQuantity || 0) - item.quantity
+          );
+          if (returnDoc.requestType === "EXCHANGE") {
+            (orderItem as any).exchangedQuantity =
+              ((orderItem as any).exchangedQuantity || 0) + item.quantity;
+          } else {
+            (orderItem as any).returnedQuantity =
+              ((orderItem as any).returnedQuantity || 0) + item.quantity;
+          }
+        }
+      }
+
       if (args.condition === "GOOD") {
         await restockReturnedItems(session, returnDoc, adminId);
-      } else {
+      } else if (args.condition === "DAMAGED" || args.condition === "MISSING_PARTS") {
         await recordDamagedReturn(session, returnDoc, adminId);
       }
+
+      order.returnStatus = "QC_APPROVED";
     } else {
-      returnDoc.status = "REJECTED_AFTER_INSPECTION";
-      order.returnStatus = "REJECTED_AFTER_INSPECTION";
+      await transitionReturnStatus({
+        returnId: returnDoc._id,
+        targetStatus: "QC_REJECTED",
+        changedBy: adminId,
+        changedByRole: "ADMIN",
+        notes: `QC Rejected by admin. Condition: ${args.condition}. Product used by customer.`,
+        session,
+      });
+
+      await transitionReturnStatus({
+        returnId: returnDoc._id,
+        targetStatus: "CLOSED",
+        changedBy: adminId,
+        changedByRole: "ADMIN",
+        notes: "Request closed after QC rejection. Item shipped back to customer.",
+        session,
+      });
+
+      returnDoc.futureReversePickupAllowed = false;
+
+      for (const item of returnDoc.items) {
+        const orderItem = order.items.find(
+          (it) => it.product.toString() === item.product.toString()
+        );
+        if (orderItem) {
+          (orderItem as any).lockedQuantity = Math.max(
+            0,
+            ((orderItem as any).lockedQuantity || 0) - item.quantity
+          );
+          (orderItem as any).futureReversePickupAllowed = false;
+        }
+      }
+
+      order.returnStatus = "QC_REJECTED";
     }
 
     await returnDoc.save({ session });
@@ -369,22 +632,7 @@ export async function inspectReturn(
     await session.commitTransaction();
     session.endSession();
 
-    // Broadcast Socket.IO and history updates
-    await recordOrderEvent({
-      orderId: order._id,
-      eventType:
-        args.result === "ACCEPTED" ? "RETURN_ACCEPTED" : "RETURN_REJECTED_AFTER_INSPECTION",
-      previousStatus: prevOrderReturnStatus,
-      newStatus: order.returnStatus,
-      source: "ADMIN",
-      metadata: {
-        returnId,
-        condition: args.condition,
-        comment: args.comment,
-      },
-    });
-
-    return returnDoc;
+    return Return.findById(returnDoc._id);
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -392,110 +640,247 @@ export async function inspectReturn(
   }
 }
 
+// Backward-compatible alias
+export const inspectReturn = (returnId: string, args: any, adminId: string) =>
+  qcInspectReturn(returnId, args, adminId);
+
 /**
- * Admin triggers refund processing for an accepted return.
+ * Issue Store Credit to Customer with partial balance tracking.
  */
-export async function refundReturn(
+export async function issueStoreCredit(
   returnId: string,
-  args?: {
-    refundMethod?: "BANK" | "UPI";
-    refundAccountReference?: string;
-  },
-  _adminId = "ADMIN"
+  args: { expiryDays?: number },
+  adminId: string
 ): Promise<any> {
   const returnDoc = await Return.findById(returnId);
   if (!returnDoc) throw new AppError(404, "Return request not found");
 
-  if (returnDoc.status !== "ACCEPTED") {
-    throw new AppError(400, "Refund can only be processed for ACCEPTED returns");
-  }
-
-  if (returnDoc.refundInformation?.refundStatus === "COMPLETED") {
-    throw new AppError(400, "Refund has already been completed");
+  if (returnDoc.status !== "QC_APPROVED" && returnDoc.status !== "SETTLEMENT_PROCESSING") {
+    throw new AppError(400, `Store credit cannot be issued in current status: ${returnDoc.status}`);
   }
 
   const order = await Order.findById(returnDoc.orderId);
   if (!order) throw new AppError(404, "Associated order not found");
 
-  const prevRefundStatus = order.refundStatus;
+  const amount = returnDoc.settlementDetails?.settlementAmount || 0;
+  if (amount <= 0) throw new AppError(400, "Settlement amount must be greater than 0");
 
-  // Prepaid Refund Flow
-  if (order.paymentMethod === "PREPAID") {
-    const payment = await Payment.findById(order.payment);
-    const rzPaymentId = order.paymentInfo?.razorpayPaymentId || payment?.razorpayPaymentId;
-    if (!rzPaymentId) {
-      throw new AppError(400, "No Razorpay payment reference found to initiate refund");
-    }
+  const creditCode = await generateCreditCode("SC");
+  const expiryDays = args.expiryDays || 365;
+  const expiryDate = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
 
-    if (!returnDoc.refundInformation) {
-      returnDoc.refundInformation = {} as any;
-    }
-    const refInfo = returnDoc.refundInformation as any;
+  const storeCredit = await StoreCredit.create({
+    creditCode,
+    customerId: returnDoc.customerId,
+    originalOrderId: returnDoc.orderId,
+    returnRequestId: returnDoc._id,
+    originalAmount: amount,
+    remainingBalance: amount,
+    expiryDate,
+    status: "ACTIVE",
+  });
 
-    // Call Razorpay API
-    const rzRefund = await refundService.processPrepaidRefund({
-      razorpayPaymentId: rzPaymentId,
-      amount: refInfo.refundAmount,
-      returnNumber: returnDoc.returnNumber,
-    });
+  returnDoc.settlementDetails = {
+    settlementType: "STORE_CREDIT",
+    storeCreditId: storeCredit._id as any,
+    settlementAmount: amount,
+    refundMethod: order.paymentMethod === "COD" ? "BANK" : "RAZORPAY",
+    processedAt: new Date(),
+  };
 
-    returnDoc.status = "COMPLETED";
-    refInfo.refundStatus = "COMPLETED";
-    refInfo.razorpayRefundId = rzRefund.refundId;
-    refInfo.processedAt = new Date();
-    await returnDoc.save();
+  await returnDoc.save();
 
-    order.refundStatus = "COMPLETED";
-    order.returnStatus = "COMPLETED";
-    await order.save();
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "REFUND_ISSUED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: `Issued Store Credit ${creditCode} of ₹${amount}`,
+  });
 
-    await recordOrderEvent({
-      orderId: order._id,
-      eventType: "REFUND_COMPLETED",
-      previousStatus: prevRefundStatus,
-      newStatus: "COMPLETED",
-      source: "ADMIN",
-      metadata: {
-        returnId,
-        razorpayRefundId: rzRefund.refundId,
-        amount: refInfo.refundAmount,
-      },
-    });
-  } else {
-    // COD Refund Flow
-    const method = args?.refundMethod || "BANK";
-    const ref = args?.refundAccountReference || "MANUAL_SETTLEMENT";
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "COMPLETED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Return process completed successfully via Store Credit",
+  });
 
-    if (!returnDoc.refundInformation) {
-      returnDoc.refundInformation = {} as any;
-    }
-    const refInfo = returnDoc.refundInformation as any;
+  order.returnStatus = "COMPLETED";
+  order.refundStatus = "COMPLETED";
+  await order.save();
 
-    returnDoc.status = "COMPLETED";
-    refInfo.refundMethod = method;
-    refInfo.refundAccountReference = ref;
-    refInfo.refundStatus = "COMPLETED";
-    refInfo.processedAt = new Date();
-    await returnDoc.save();
+  return { returnDoc: await Return.findById(returnDoc._id), storeCredit };
+}
 
-    order.refundStatus = "COMPLETED";
-    order.returnStatus = "COMPLETED";
-    await order.save();
+// Backward-compatible alias for refundReturn
+export const refundReturn = (returnId: string, args: any, adminId: string) =>
+  issueStoreCredit(returnId, args, adminId);
 
-    await recordOrderEvent({
-      orderId: order._id,
-      eventType: "REFUND_COMPLETED",
-      previousStatus: prevRefundStatus,
-      newStatus: "COMPLETED",
-      source: "ADMIN",
-      metadata: {
-        returnId,
-        refundMethod: method,
-        refundAccountReference: ref,
-        amount: refInfo.refundAmount,
-      },
-    });
+/**
+ * Issue Exchange Voucher (1 month validity) when replacement item is unavailable.
+ */
+export async function issueExchangeVoucher(
+  returnId: string,
+  args: { expiryDays?: number },
+  adminId: string
+): Promise<any> {
+  const returnDoc = await Return.findById(returnId);
+  if (!returnDoc) throw new AppError(404, "Return request not found");
+
+  if (returnDoc.status !== "QC_APPROVED" && returnDoc.status !== "SETTLEMENT_PROCESSING") {
+    throw new AppError(
+      400,
+      `Exchange voucher cannot be issued in current status: ${returnDoc.status}`
+    );
   }
 
-  return returnDoc;
+  const order = await Order.findById(returnDoc.orderId);
+  if (!order) throw new AppError(404, "Associated order not found");
+
+  const amount = returnDoc.settlementDetails?.settlementAmount || 0;
+  const voucherCode = await generateCreditCode("EXV");
+  const expiryDays = args.expiryDays || 30;
+  const expiryDate = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
+
+  const voucher = await ExchangeVoucher.create({
+    voucherCode,
+    customerId: returnDoc.customerId,
+    originalOrderId: returnDoc.orderId,
+    returnRequestId: returnDoc._id,
+    amount,
+    remainingBalance: amount,
+    expiryDate,
+    status: "ACTIVE",
+  });
+
+  returnDoc.settlementDetails = {
+    settlementType: "EXCHANGE_VOUCHER",
+    exchangeVoucherId: voucher._id as any,
+    settlementAmount: amount,
+    refundMethod: order.paymentMethod === "COD" ? "BANK" : "RAZORPAY",
+    processedAt: new Date(),
+  };
+
+  await returnDoc.save();
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "VOUCHER_ISSUED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: `Issued Exchange Voucher ${voucherCode} of ₹${amount}`,
+  });
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "COMPLETED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Exchange process completed via Exchange Voucher",
+  });
+
+  order.returnStatus = "COMPLETED";
+  await order.save();
+
+  return { returnDoc: await Return.findById(returnDoc._id), voucher };
+}
+
+/**
+ * Create a separate Replacement Order (e.g. EX-ORD-1001-01) for approved exchange.
+ */
+export async function createReplacementOrder(
+  returnId: string,
+  args: { replacementItem: { productId: string; quantity: number; size?: string } },
+  adminId: string
+): Promise<any> {
+  const returnDoc = await Return.findById(returnId);
+  if (!returnDoc) throw new AppError(404, "Return request not found");
+
+  if (returnDoc.status !== "QC_APPROVED" && returnDoc.status !== "SETTLEMENT_PROCESSING") {
+    throw new AppError(
+      400,
+      `Replacement order cannot be created in current status: ${returnDoc.status}`
+    );
+  }
+
+  const originalOrder = await Order.findById(returnDoc.orderId);
+  if (!originalOrder) throw new AppError(404, "Original order not found");
+
+  const product = await Product.findById(args.replacementItem.productId);
+  if (!product) throw new AppError(404, "Replacement product not found");
+
+  const replacementOrderNumber = `EX-${originalOrder.orderNumber}-01`;
+
+  const prodObj = product.toObject() as any;
+  const prodName = prodObj.name || prodObj.title || "Replacement Item";
+  const unitPrice = prodObj.price || prodObj.pricing?.salePrice || prodObj.pricing?.basePrice || 0;
+  const primaryImg =
+    (prodObj.images && prodObj.images[0]) || prodObj.media?.primaryImage?.url || "";
+
+  const replacementOrder = await Order.create({
+    orderNumber: replacementOrderNumber,
+    customer: originalOrder.customer,
+    items: [
+      {
+        product: product._id,
+        name: prodName,
+        slug: prodObj.slug || "replacement-item",
+        sku: prodObj.sku,
+        unitPrice,
+        quantity: args.replacementItem.quantity,
+        lineTotal: unitPrice * args.replacementItem.quantity,
+        image: primaryImg,
+        size: args.replacementItem.size || returnDoc.exchangeDetails?.preferredSize,
+      },
+    ],
+    shippingAddress: originalOrder.shippingAddress,
+    subtotal: 0,
+    discount: 0,
+    tax: 0,
+    shipping: 0,
+    total: 0,
+    orderStatus: "PROCESSING",
+    paymentStatus: "CAPTURED",
+    paymentMethod: "PREPAID",
+  });
+
+  returnDoc.settlementDetails = {
+    settlementType: "EXCHANGE_REPLACEMENT",
+    replacementOrderId: replacementOrder._id as any,
+    replacementOrderNumber,
+    settlementAmount: 0,
+    refundMethod: originalOrder.paymentMethod === "COD" ? "BANK" : "RAZORPAY",
+    processedAt: new Date(),
+  };
+  await returnDoc.save();
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "EXCHANGE_PROCESSING",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: `Created Replacement Order ${replacementOrderNumber}`,
+  });
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "REPLACEMENT_SHIPPED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Replacement order created and queued for shipment",
+  });
+
+  await transitionReturnStatus({
+    returnId: returnDoc._id,
+    targetStatus: "COMPLETED",
+    changedBy: adminId,
+    changedByRole: "ADMIN",
+    notes: "Exchange completed with replacement order",
+  });
+
+  originalOrder.returnStatus = "COMPLETED";
+  await originalOrder.save();
+
+  return { returnDoc: await Return.findById(returnDoc._id), replacementOrder };
 }
