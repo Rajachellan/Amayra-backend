@@ -199,38 +199,8 @@ export async function calculateCartPricing(args: {
         discountValue: couponDoc.discountValue,
         discountAmount: couponDiscount,
       };
-    } else if (code === "WELCOME5") {
-      couponDiscount = round2(subtotal * 0.05);
-      appliedCoupon = {
-        code: "WELCOME5",
-        discountType: "percentage",
-        discountValue: 5,
-        discountAmount: couponDiscount,
-      };
     } else {
-      // Fallback check in PromotionalBanner
-      const banner = await PromotionalBanner.findOne({
-        couponCode: { $regex: new RegExp(`^${code}$`, "i") },
-        active: true,
-      }).lean();
-
-      if (banner) {
-        let pct = 5;
-        const match = code.match(/\d+/);
-        if (match) {
-          const val = parseInt(match[0], 10);
-          if (val > 0 && val <= 100) pct = val;
-        }
-        couponDiscount = round2(subtotal * (pct / 100));
-        appliedCoupon = {
-          code: code,
-          discountType: "percentage",
-          discountValue: pct,
-          discountAmount: couponDiscount,
-        };
-      } else {
-        throw new AppError(400, `Invalid or expired coupon code: ${code}`);
-      }
+      throw new AppError(400, `Invalid or expired coupon code: ${code}`);
     }
   }
 

@@ -32,9 +32,15 @@ export async function listPublicCoupons(
       ],
     })
       .sort({ createdAt: -1 })
-      .select("code title description discountType discountValue minCartValue maxDiscount")
+      .select(
+        "code title description discountType discountValue minCartValue maxDiscount usageLimit timesUsed"
+      )
       .lean();
-    res.json(list);
+
+    const activeCoupons = list.filter(
+      (c) => c.usageLimit == null || (c.timesUsed ?? 0) < c.usageLimit
+    );
+    res.json(activeCoupons);
   } catch (e) {
     next(e);
   }
