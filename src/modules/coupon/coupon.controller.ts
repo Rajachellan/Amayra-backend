@@ -61,16 +61,47 @@ export async function createCouponAdmin(
     const existing = await Coupon.findOne({ code });
     if (existing) throw new AppError(400, `Coupon code '${code}' already exists`);
 
+    const discountType = body.discountType === "fixed" ? "fixed" : "percentage";
+    const discountValue = Number(body.discountValue) || 0;
+    if (discountValue <= 0) {
+      throw new AppError(400, "Discount value must be greater than 0");
+    }
+    if (discountType === "percentage" && discountValue > 100) {
+      throw new AppError(400, "Percentage discount cannot exceed 100%");
+    }
+
+    let startDate: Date | null = null;
+    if (body.startDate) {
+      const parsed = new Date(String(body.startDate));
+      if (!isNaN(parsed.getTime())) startDate = parsed;
+    }
+
+    let endDate: Date | null = null;
+    if (body.endDate) {
+      const str = String(body.endDate);
+      const parsed = new Date(str);
+      if (!isNaN(parsed.getTime())) {
+        endDate = parsed;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(str.trim())) {
+          endDate.setHours(23, 59, 59, 999);
+        }
+      }
+    }
+
+    if (startDate && endDate && endDate < startDate) {
+      throw new AppError(400, "End date (validity) cannot be before start date");
+    }
+
     const coupon = await Coupon.create({
       code,
       title: body.title || "",
       description: body.description || "",
-      discountType: body.discountType === "fixed" ? "fixed" : "percentage",
-      discountValue: Number(body.discountValue) || 0,
+      discountType,
+      discountValue,
       minCartValue: Number(body.minCartValue) || 0,
       maxDiscount: body.maxDiscount ? Number(body.maxDiscount) : null,
-      startDate: body.startDate ? new Date(String(body.startDate)) : null,
-      endDate: body.endDate ? new Date(String(body.endDate)) : null,
+      startDate,
+      endDate,
       usageLimit: body.usageLimit ? Number(body.usageLimit) : null,
       perUserLimit: body.perUserLimit ? Number(body.perUserLimit) : null,
       active: body.active ?? true,
@@ -103,16 +134,62 @@ export async function updateCouponAdmin(
     if (body.code) coupon.code = String(body.code).trim().toUpperCase();
     if (body.title !== undefined) coupon.title = String(body.title).trim();
     if (body.description !== undefined) coupon.description = String(body.description).trim();
-    if (body.discountType !== undefined)
-      coupon.discountType = body.discountType === "fixed" ? "fixed" : "percentage";
-    if (body.discountValue !== undefined) coupon.discountValue = Number(body.discountValue) || 0;
+
+    let newDiscountType = coupon.discountType;
+    if (body.discountType !== undefined) {
+      newDiscountType = body.discountType === "fixed" ? "fixed" : "percentage";
+    }
+    let newDiscountValue = coupon.discountValue;
+    if (body.discountValue !== undefined) {
+      newDiscountValue = Number(body.discountValue) || 0;
+    }
+
+    if (newDiscountValue <= 0) {
+      throw new AppError(400, "Discount value must be greater than 0");
+    }
+    if (newDiscountType === "percentage" && newDiscountValue > 100) {
+      throw new AppError(400, "Percentage discount cannot exceed 100%");
+    }
+
+    let newStartDate = coupon.startDate;
+    if (body.startDate !== undefined) {
+      if (body.startDate) {
+        const parsed = new Date(String(body.startDate));
+        newStartDate = !isNaN(parsed.getTime()) ? parsed : null;
+      } else {
+        newStartDate = null;
+      }
+    }
+
+    let newEndDate = coupon.endDate;
+    if (body.endDate !== undefined) {
+      if (body.endDate) {
+        const str = String(body.endDate);
+        const parsed = new Date(str);
+        if (!isNaN(parsed.getTime())) {
+          newEndDate = parsed;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(str.trim())) {
+            newEndDate.setHours(23, 59, 59, 999);
+          }
+        } else {
+          newEndDate = null;
+        }
+      } else {
+        newEndDate = null;
+      }
+    }
+
+    if (newStartDate && newEndDate && newEndDate < newStartDate) {
+      throw new AppError(400, "End date (validity) cannot be before start date");
+    }
+
+    coupon.discountType = newDiscountType;
+    coupon.discountValue = newDiscountValue;
+    coupon.startDate = newStartDate;
+    coupon.endDate = newEndDate;
     if (body.minCartValue !== undefined) coupon.minCartValue = Number(body.minCartValue) || 0;
     if (body.maxDiscount !== undefined)
       coupon.maxDiscount = body.maxDiscount ? Number(body.maxDiscount) : null;
-    if (body.startDate !== undefined)
-      coupon.startDate = body.startDate ? new Date(String(body.startDate)) : null;
-    if (body.endDate !== undefined)
-      coupon.endDate = body.endDate ? new Date(String(body.endDate)) : null;
     if (body.usageLimit !== undefined)
       coupon.usageLimit = body.usageLimit ? Number(body.usageLimit) : null;
     if (body.perUserLimit !== undefined)

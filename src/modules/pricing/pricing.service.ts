@@ -166,8 +166,19 @@ export async function calculateCartPricing(args: {
       if (couponDoc.startDate && new Date(couponDoc.startDate) > now) {
         throw new AppError(400, `Coupon ${code} is not active yet`);
       }
-      if (couponDoc.endDate && new Date(couponDoc.endDate) < now) {
-        throw new AppError(400, `Coupon ${code} has expired`);
+      if (couponDoc.endDate) {
+        const end = new Date(couponDoc.endDate);
+        if (
+          end.getHours() === 0 &&
+          end.getMinutes() === 0 &&
+          end.getSeconds() === 0 &&
+          end.getMilliseconds() === 0
+        ) {
+          end.setHours(23, 59, 59, 999);
+        }
+        if (end < now) {
+          throw new AppError(400, `Coupon ${code} has expired`);
+        }
       }
       // Validate usage limit
       if (couponDoc.usageLimit != null && couponDoc.timesUsed >= couponDoc.usageLimit) {
