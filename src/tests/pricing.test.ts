@@ -133,8 +133,8 @@ async function runTests() {
     assertEq("Case 1 Subtotal", c1.subtotal, 1000);
     assertEq("Case 1 Automatic Discount", c1.automaticDiscount, 0);
     assertEq("Case 1 Final Amount", c1.finalAmount, 1000);
-    assertEq("Case 1 Taxable Value", c1.taxableValue, 970.87);
-    assertEq("Case 1 GST Amount", c1.gstAmount, 29.13);
+    assertEq("Case 1 Taxable Value", c1.taxableValue, 971);
+    assertEq("Case 1 GST Amount", c1.gstAmount, 29);
 
     // Case 2: Cart = ₹1,499, Discount = 0%
     const c2 = await calculateCartPricing({ items: [{ slug: p4.slug, quantity: 1 }] });
@@ -157,18 +157,18 @@ async function runTests() {
     }); // 2000 > 1500 -> 15%
     assertEq("Case 3 15% slab discount on 2000", c3b.automaticDiscount, 300);
 
-    // Case 4: Cart = ₹1,899, Discount = 15%, Final = ₹1,614.15
+    // Case 4: Cart = ₹1,899, Discount = 15%, Final = ₹1,614
     const c4 = await calculateCartPricing({ items: [{ slug: p2.slug, quantity: 1 }] });
     assertEq("Case 4 Subtotal", c4.subtotal, 1899);
-    assertEq("Case 4 Automatic Discount (15%)", c4.automaticDiscount, 284.85);
-    assertEq("Case 4 Final Amount", c4.finalAmount, 1614.15);
-    assertEq("Case 4 Taxable Value", c4.taxableValue, 1567.14);
-    assertEq("Case 4 GST Amount", c4.gstAmount, 47.01);
+    assertEq("Case 4 Automatic Discount (15%)", c4.automaticDiscount, 285);
+    assertEq("Case 4 Final Amount", c4.finalAmount, 1614);
+    assertEq("Case 4 Taxable Value", c4.taxableValue, 1567);
+    assertEq("Case 4 GST Amount", c4.gstAmount, 47);
 
     // Case 5: Cart = ₹2,499, Discount = 15%
     const c5 = await calculateCartPricing({ items: [{ slug: p5.slug, quantity: 1 }] });
     assertEq("Case 5 Subtotal", c5.subtotal, 2499);
-    assertEq("Case 5 Automatic Discount (15%)", c5.automaticDiscount, 374.85);
+    assertEq("Case 5 Automatic Discount (15%)", c5.automaticDiscount, 375);
 
     // Case 6: Cart = ₹2,500, Discount = 25%, Final = ₹1,875
     const c6 = await calculateCartPricing({ items: [{ slug: p3.slug, quantity: 1 }] });
@@ -176,22 +176,22 @@ async function runTests() {
     assertEq("Case 6 Automatic Discount (25%)", c6.automaticDiscount, 625);
     assertEq("Case 6 Final Amount", c6.finalAmount, 1875);
 
-    // Case 7: Cart = ₹1,899, Next = ₹2,500, Needed = ₹601, Extra payment = ₹260.85
+    // Case 7: Cart = ₹1,899, Next = ₹2,500, Needed = ₹601, Extra payment = ₹261
     assertEq("Case 7 Upsell Available", c4.upsell.available, true);
     assertEq("Case 7 Next Threshold", c4.upsell.nextThreshold, 2500);
     assertEq("Case 7 Amount to Unlock", c4.upsell.amountToUnlock, 601);
     assertEq("Case 7 New Payable", c4.upsell.newPayable, 1875);
-    assertEq("Case 7 Additional Payment", c4.upsell.additionalPayment, 260.85);
+    assertEq("Case 7 Additional Payment", c4.upsell.additionalPayment, 261);
 
     // Case 8: Valid Coupon (TEST_FLAT100)
     const c8 = await calculateCartPricing({
       items: [{ slug: p2.slug, quantity: 1 }],
       couponCode: "TEST_FLAT100",
     });
-    assertEq("Case 8 Automatic Discount", c8.automaticDiscount, 284.85);
+    assertEq("Case 8 Automatic Discount", c8.automaticDiscount, 285);
     assertEq("Case 8 Coupon Discount", c8.couponDiscount, 100);
-    assertEq("Case 8 Total Discount", c8.totalDiscount, 384.85);
-    assertEq("Case 8 Final Amount", c8.finalAmount, 1514.15);
+    assertEq("Case 8 Total Discount", c8.totalDiscount, 385);
+    assertEq("Case 8 Final Amount", c8.finalAmount, 1514);
 
     // Case 9: Expired Coupon
     try {
@@ -236,8 +236,8 @@ async function runTests() {
       items: [{ slug: p2.slug, quantity: 1 }], // Slab discount = 284.85, coupon = 100
       couponCode: "TEST_FLAT100",
     });
-    // Since slab 284.85 > coupon 100, total discount is slab discount 284.85
-    assertEq("Case 12 Stacking Disabled Total Discount", c12.totalDiscount, 284.85);
+    // Since slab 285 > coupon 100, total discount is slab discount 285
+    assertEq("Case 12 Stacking Disabled Total Discount", c12.totalDiscount, 285);
 
     // Case 13: Stacking Enabled
     settings.allowCouponWithSlabDiscount = true;
@@ -246,7 +246,7 @@ async function runTests() {
       items: [{ slug: p2.slug, quantity: 1 }],
       couponCode: "TEST_FLAT100",
     });
-    assertEq("Case 13 Stacking Enabled Total Discount", c13.totalDiscount, 384.85);
+    assertEq("Case 13 Stacking Enabled Total Discount", c13.totalDiscount, 385);
 
     // Case 14: Highest discount slab reached (Upsell available = false)
     const c14 = await calculateCartPricing({ items: [{ slug: p3.slug, quantity: 1 }] });
@@ -282,9 +282,9 @@ async function runTests() {
     const c18 = await calculateCartPricing({ items: [{ slug: p18.slug, quantity: 1 }] });
     assertEq("Case 18 Subtotal", c18.subtotal, 1000);
     assertEq("Case 18 GST Rate", c18.gstRate, 18);
-    // Taxable = 1000 / 1.18 = 847.46, GST = 152.54
-    assertEq("Case 18 Taxable Value", c18.taxableValue, 847.46);
-    assertEq("Case 18 GST Amount", c18.gstAmount, 152.54);
+    // Taxable = 1000 / 1.18 = 847, GST = 153
+    assertEq("Case 18 Taxable Value", c18.taxableValue, 847);
+    assertEq("Case 18 GST Amount", c18.gstAmount, 153);
 
     // Clean up test records
     await Product.deleteMany({ slug: { $regex: /^test-pricing-/ } });

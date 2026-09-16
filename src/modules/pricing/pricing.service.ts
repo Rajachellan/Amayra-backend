@@ -61,8 +61,8 @@ export type PricingResult = {
   }>;
 };
 
-function round2(val: number): number {
-  return Math.round(val * 100) / 100;
+function roundOff(val: number): number {
+  return Math.round(val);
 }
 
 export async function calculateCartPricing(args: {
@@ -112,12 +112,13 @@ export async function calculateCartPricing(args: {
       throw new AppError(400, `Product not found: ${key}`);
     }
 
-    const unitPrice = p.salePrice != null && p.salePrice >= 0 ? p.salePrice : p.price;
-    if (!(unitPrice >= 0)) {
+    const rawUnitPrice = p.salePrice != null && p.salePrice >= 0 ? p.salePrice : p.price;
+    if (!(rawUnitPrice >= 0)) {
       throw new AppError(400, `Invalid price for ${p.name}`);
     }
+    const unitPrice = roundOff(rawUnitPrice);
 
-    const lineTotal = round2(unitPrice * qty);
+    const lineTotal = roundOff(unitPrice * qty);
     subtotal += lineTotal;
 
     const itemGstRate = args.customGstRate ?? (p as any).gstRate ?? settings.defaultGstRate ?? 3;
@@ -136,9 +137,11 @@ export async function calculateCartPricing(args: {
     });
   }
 
-  subtotal = round2(subtotal);
+  subtotal = roundOff(subtotal);
   const effectiveGstRate =
-    subtotal > 0 ? round2(totalWeightedGst / subtotal) : (settings.defaultGstRate ?? 3);
+    subtotal > 0
+      ? Math.round((totalWeightedGst / subtotal) * 100) / 100
+      : (settings.defaultGstRate ?? 3);
 
   // 2. Determine applicable discount slab
   let activeSlab = { minimumCartValue: 0, discountPercentage: 0 };
@@ -148,7 +151,7 @@ export async function calculateCartPricing(args: {
     }
   }
 
-  let automaticDiscount = round2(subtotal * (activeSlab.discountPercentage / 100));
+  let automaticDiscount = roundOff(subtotal * (activeSlab.discountPercentage / 100));
 
   // 3. Validate & Calculate Coupon Discount
   let couponDiscount = 0;
@@ -202,7 +205,7 @@ export async function calculateCartPricing(args: {
       } else {
         rawDiscount = Math.min(couponDoc.discountValue, subtotal);
       }
-      couponDiscount = round2(rawDiscount);
+      couponDiscount = roundOff(rawDiscount);
 
       appliedCoupon = {
         code: couponDoc.code,
@@ -218,7 +221,7 @@ export async function calculateCartPricing(args: {
   // 4. Stacking Rules Enforcement
   let totalDiscount = 0;
   if (settings.allowCouponWithSlabDiscount) {
-    totalDiscount = round2(automaticDiscount + couponDiscount);
+    totalDiscount = roundOff(automaticDiscount + couponDiscount);
   } else {
     // If stacking is disabled, give the customer the higher discount
     if (couponDiscount > automaticDiscount) {
@@ -232,11 +235,11 @@ export async function calculateCartPricing(args: {
   }
 
   // 5. Final Payable Amount & GST Extraction
-  const finalAmount = Math.max(0, round2(subtotal - totalDiscount));
+  const finalAmount = Math.max(0, roundOff(subtotal - totalDiscount));
 
   // GST Calculation: Taxable Value = Final Amount / (1 + GST/100); GST = Final - Taxable
-  const taxableValue = round2(finalAmount / (1 + effectiveGstRate / 100));
-  const gstAmount = round2(finalAmount - taxableValue);
+  const taxableValue = roundOff(finalAmount / (1 + effectiveGstRate / 100));
+  const gstAmount = Math.max(0, roundOff(finalAmount - taxableValue));
 
   // 6. Dynamic Cart Upsell Calculation
   let upsell: PricingResult["upsell"] = { available: false };
@@ -244,18 +247,18 @@ export async function calculateCartPricing(args: {
   const nextSlab = slabs.find((s) => s.minimumCartValue > subtotal);
   if (nextSlab) {
     const nextThreshold = nextSlab.minimumCartValue;
-    const amountToUnlock = round2(nextThreshold - subtotal);
-    const newAutomaticDiscount = round2(nextThreshold * (nextSlab.discountPercentage / 100));
+    const amountToUnlock = roundOff(nextThreshold - subtotal);
+    const newAutomaticDiscount = roundOff(nextThreshold * (nextSlab.discountPercentage / 100));
 
     let newTotalDiscount = 0;
     if (settings.allowCouponWithSlabDiscount) {
-      newTotalDiscount = round2(newAutomaticDiscount + couponDiscount);
+      newTotalDiscount = roundOff(newAutomaticDiscount + couponDiscount);
     } else {
       newTotalDiscount = Math.max(newAutomaticDiscount, couponDiscount);
     }
 
-    const newPayable = Math.max(0, round2(nextThreshold - newTotalDiscount));
-    const additionalPayment = round2(newPayable - finalAmount);
+    const newPayable = Math.max(0, roundOff(nextThreshold - newTotalDiscount));
+    const additionalPayment = roundOff(newPayable - finalAmount);
 
     upsell = {
       available: true,

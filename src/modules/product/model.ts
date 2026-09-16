@@ -71,6 +71,11 @@ const productSchema = new Schema(
   { timestamps: true }
 );
 
+productSchema.pre("save", function () {
+  if (typeof this.price === "number") this.price = Math.round(this.price);
+  if (typeof this.salePrice === "number") this.salePrice = Math.round(this.salePrice);
+});
+
 productSchema.index({ featured: 1, status: 1 });
 productSchema.index({ trendingScore: -1 });
 productSchema.index({ soldCount: -1 });

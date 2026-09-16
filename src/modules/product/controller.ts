@@ -130,6 +130,7 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
       Product.countDocuments(filter),
     ]);
 
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.json({
       items,
       total,
@@ -166,8 +167,9 @@ export async function validateCartBatch(
     const result = items.map((item) => {
       const match = docs.find((d) => d.slug === item.slug || String(d._id) === item.id);
       if (!match) return { id: item.id, slug: item.slug, stock: 0, price: 0, valid: false };
-      const effectivePrice =
-        match.salePrice != null && match.salePrice < match.price ? match.salePrice : match.price;
+      const effectivePrice = Math.round(
+        match.salePrice != null && match.salePrice < match.price ? match.salePrice : match.price
+      );
       return {
         id: String(match._id),
         slug: match.slug,
@@ -256,6 +258,7 @@ export async function getProductByIdAdmin(
         .populate("lookbooks", "title slug images coverImage");
     }
     if (!doc) throw new AppError(404, "Product not found");
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.json(doc);
   } catch (e) {
     next(e);
@@ -269,13 +272,17 @@ export async function getProductBySlug(
 ): Promise<void> {
   try {
     const slug = String(req.params.slug || "");
-    const doc = await Product.findOne(publishedFilter({ slug }))
+    const queryFilter = mongoose.isValidObjectId(slug)
+      ? { $or: [{ slug }, { _id: slug }] }
+      : { slug };
+    const doc = await Product.findOne(publishedFilter(queryFilter))
       .populate("category", "name slug")
       .populate("subCategory", "name slug")
       .populate("collections", "name slug image")
       .populate("occasions", "name slug image")
       .populate("lookbooks", "title slug coverImage images");
     if (!doc) throw new AppError(404, "Product not found");
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     res.json(doc);
   } catch (e) {
     next(e);

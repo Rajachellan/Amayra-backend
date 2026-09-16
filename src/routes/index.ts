@@ -29,6 +29,8 @@ import * as homepageSectionController from "../controllers/homepageSectionContro
 import * as authController from "../controllers/authController.js";
 import * as blogController from "../controllers/blogController.js";
 import * as leadController from "../controllers/leadController.js";
+import * as newsletterController from "../controllers/newsletterController.js";
+import * as reviewController from "../controllers/reviewController.js";
 import * as dashboardController from "../controllers/dashboardController.js";
 import * as customerAuthController from "../controllers/customerAuthController.js";
 import * as orderCustomerController from "../controllers/orderCustomerController.js";
@@ -642,6 +644,29 @@ router.post("/leads", leadController.submitLead);
 router.get("/admin/leads", authenticateAdmin, leadController.listLeadsAdmin);
 router.put("/leads/:id/status", authenticateAdmin, leadController.updateLeadStatus);
 router.delete("/leads/:id", authenticateAdmin, leadController.deleteLead);
+
+router.post("/newsletter/subscribe", newsletterController.subscribe);
+router.get("/admin/newsletter", authenticateAdmin, newsletterController.listSubscribersAdmin);
+router.delete(
+  "/admin/newsletter/:id",
+  authenticateAdmin,
+  newsletterController.deleteSubscriberAdmin
+);
+
+router.get("/reviews/product/:idOrSlug", reviewController.listProductReviews);
+router.post("/reviews", reviewController.createReview);
+router.get("/admin/reviews", authenticateAdmin, reviewController.listReviewsAdmin);
+router.patch(
+  "/admin/reviews/:id/status",
+  authenticateAdmin,
+  reviewController.updateReviewStatusAdmin
+);
+router.put(
+  "/admin/reviews/:id/status",
+  authenticateAdmin,
+  reviewController.updateReviewStatusAdmin
+);
+router.delete("/admin/reviews/:id", authenticateAdmin, reviewController.deleteReviewAdmin);
 
 router.post(
   "/upload",

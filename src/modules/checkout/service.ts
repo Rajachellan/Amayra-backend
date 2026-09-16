@@ -20,8 +20,8 @@ export type ShippingAddressInput = {
 };
 
 function normalizeOrderTotal(subtotal: number, taxPercent: number, shipping: number) {
-  const tax = Math.round(subtotal * taxPercent * 100) / 100;
-  const total = Math.round((subtotal + tax + shipping) * 100) / 100;
+  const tax = Math.round(subtotal * taxPercent);
+  const total = Math.round(subtotal + tax + shipping);
   return { tax, total };
 }
 
@@ -125,7 +125,7 @@ export async function buildOrderDraft(
     });
   }
 
-  const finalTotal = Math.round((pricing.finalAmount + shipping) * 100) / 100;
+  const finalTotal = Math.round(pricing.finalAmount + shipping);
 
   const addr = shippingAddress;
   const fullName = addr.fullName?.trim();
