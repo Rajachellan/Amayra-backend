@@ -46,7 +46,7 @@ export const tooltipSchema = z
   .partial();
 
 export const hotspotSchema = z.object({
-  product: z.string().min(1, "Product is required"),
+  product: z.string().optional().nullable().or(z.literal("")),
   x: z.number().min(0).max(100),
   y: z.number().min(0).max(100),
   label: z.string().max(80).optional(),

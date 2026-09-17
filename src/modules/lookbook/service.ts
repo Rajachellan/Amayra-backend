@@ -157,9 +157,9 @@ export async function getLookbookBySlug(slug: string) {
     .populate("galleryImages.hotspots.product")
     .populate("products");
   if (!doc) throw new AppError(404, "Lookbook not found");
-  doc.analytics = doc.analytics ?? { views: 0, clicks: 0, productClicks: 0, conversions: 0 };
-  doc.analytics.views = (doc.analytics.views ?? 0) + 1;
-  await doc.save();
+  void Lookbook.updateOne({ _id: doc._id }, { $inc: { "analytics.views": 1 } }).catch(
+    () => undefined
+  );
   return doc;
 }
 
@@ -180,7 +180,19 @@ export async function updateLookbookDoc(id: string, body: LookbookBody) {
   if (body.coverImage !== undefined) doc.coverImage = body.coverImage ?? undefined;
   if (body.images != null) doc.images = body.images;
   if (body.galleryImages != null) {
-    doc.galleryImages = body.galleryImages as unknown as typeof doc.galleryImages;
+    doc.galleryImages = body.galleryImages.map((img) => ({
+      ...img,
+      hotspots: (img.hotspots ?? [])
+        .filter((h) =>
+          Boolean(
+            h.product && String(h.product).trim() && mongoose.isValidObjectId(String(h.product))
+          )
+        )
+        .map((h) => ({
+          ...h,
+          product: new mongoose.Types.ObjectId(String(h.product)),
+        })),
+    })) as never;
   }
   if (body.seo != null) {
     doc.seo = {
@@ -267,9 +279,13 @@ export async function addHotspot(id: string, imageId: string, hotspot: HotspotBo
   if (!doc) throw new AppError(404, "Not found");
   const img = doc.galleryImages.id(imageId);
   if (!img) throw new AppError(404, "Image not found");
+  const productObjId =
+    hotspot.product && mongoose.isValidObjectId(hotspot.product)
+      ? new mongoose.Types.ObjectId(hotspot.product)
+      : undefined;
   img.hotspots.push({
     ...hotspot,
-    product: new mongoose.Types.ObjectId(hotspot.product),
+    product: productObjId,
     sortOrder: hotspot.sortOrder ?? img.hotspots.length,
   } as never);
   pushAudit(doc, "hotspot_added", { imageId, product: hotspot.product });

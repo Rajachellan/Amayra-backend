@@ -2,7 +2,7 @@ import mongoose, { Schema, type InferSchemaType } from "mongoose";
 
 const hotspotSchema = new Schema(
   {
-    product: { type: Schema.Types.ObjectId, ref: "Product", required: true },
+    product: { type: Schema.Types.ObjectId, ref: "Product", required: false },
     x: { type: Number, required: true, min: 0, max: 100 },
     y: { type: Number, required: true, min: 0, max: 100 },
     label: { type: String, trim: true, default: "" },
@@ -151,12 +151,15 @@ lookbookSchema.pre("save", function syncLegacy(next) {
     const productIds = new Set<string>();
     for (const img of gallery) {
       for (const h of img.hotspots ?? []) {
-        if (h.product) productIds.add(String(h.product));
+        if (h.product) {
+          const rawId = (h.product as any)?._id
+            ? String((h.product as any)._id)
+            : String(h.product);
+          if (mongoose.isValidObjectId(rawId)) productIds.add(rawId);
+        }
       }
     }
-    if (productIds.size) {
-      this.products = [...productIds].map((id) => new mongoose.Types.ObjectId(id));
-    }
+    this.products = [...productIds].map((id) => new mongoose.Types.ObjectId(id));
   }
   next();
 });
