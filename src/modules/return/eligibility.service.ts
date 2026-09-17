@@ -5,6 +5,9 @@ export type ItemEligibilityResult = {
   productId: string;
   sku?: string;
   name: string;
+  size?: string;
+  unitPrice?: number;
+  image?: string;
   orderedQuantity: number;
   returnedQuantity: number;
   exchangedQuantity: number;
@@ -26,6 +29,9 @@ export async function calculateOrderItemsEligibility(
       productId: it.product.toString(),
       sku: it.sku,
       name: it.name,
+      size: it.size,
+      unitPrice: it.unitPrice,
+      image: it.image,
       orderedQuantity: it.quantity,
       returnedQuantity: it.returnedQuantity || 0,
       exchangedQuantity: it.exchangedQuantity || 0,
@@ -95,6 +101,9 @@ export async function calculateOrderItemsEligibility(
       productId: pId,
       sku: it.sku,
       name: it.name,
+      size: it.size,
+      unitPrice: it.unitPrice,
+      image: it.image,
       orderedQuantity: ordered,
       returnedQuantity: returned,
       exchangedQuantity: exchanged,

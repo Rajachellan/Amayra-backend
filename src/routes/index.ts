@@ -1,6 +1,10 @@
 import { Router } from "express";
 import multer from "multer";
-import { authenticateAdmin, authenticateCustomer } from "../middleware/auth.js";
+import {
+  authenticateAdmin,
+  authenticateCustomer,
+  optionalAuthenticateCustomer,
+} from "../middleware/auth.js";
 import {
   adminLoginRateLimiter,
   authRateLimiter,
@@ -8,6 +12,7 @@ import {
   otpRateLimiter,
   otpSlowDown,
   paymentRateLimiter,
+  returnLookupRateLimiter,
 } from "../common/middleware/rateLimiters.js";
 import { requirePermission } from "../common/security/rbac.js";
 import { assertSafeImageUpload } from "../common/security/fileUpload.js";
@@ -233,7 +238,8 @@ router.get(
   authenticateCustomer,
   returnController.getItemEligibility
 );
-router.post("/returns", authenticateCustomer, returnController.postCreateReturnRequest);
+router.post("/returns/lookup", returnLookupRateLimiter, returnController.lookupOrderForReturn);
+router.post("/returns", optionalAuthenticateCustomer, returnController.postCreateReturnRequest);
 router.get("/returns", authenticateCustomer, returnController.getReturnList);
 router.get("/returns/:id", authenticateCustomer, returnController.getReturnById);
 

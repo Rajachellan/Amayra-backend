@@ -82,6 +82,29 @@ export function authenticateCustomer(req: Request, _res: Response, next: NextFun
   verifyRole(req, next, ["customer"]);
 }
 
+export function optionalAuthenticateCustomer(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): void {
+  const token = readToken(req);
+  if (!token) {
+    return next();
+  }
+  try {
+    const payload = jwt.verify(token, jwtConfig.secret) as JwtPayload;
+    if (payload?.sub && payload.role === "customer" && payload.typ !== "refresh") {
+      if (!isTokenBlacklisted(payload.jti)) {
+        (req as Request & { customerId?: string }).customerId = payload.sub;
+        (req as Request & { authRole?: Role }).authRole = "customer";
+      }
+    }
+  } catch {
+    // Ignore invalid optional token, controller will fall back to other mechanisms
+  }
+  next();
+}
+
 export function authenticateSuperAdmin(req: Request, _res: Response, next: NextFunction): void {
   verifyRole(req, next, ["super_admin"]);
 }

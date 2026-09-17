@@ -81,3 +81,17 @@ export const otpSlowDown = slowDown({
   maxDelayMs: 4000,
   validate: { delayMs: false },
 });
+
+export const returnLookupRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: isProduction ? 25 : 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    message: "Too many return lookup attempts. Please wait 15 minutes before trying again.",
+  },
+  handler: (req, res, _next, options) => {
+    logSecurityEvent("rate_limit_return_lookup", { ip: req.ip, path: req.originalUrl });
+    res.status(options.statusCode).json(options.message);
+  },
+});

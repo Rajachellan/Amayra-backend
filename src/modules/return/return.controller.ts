@@ -1,4 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
+import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
+import { jwtConfig } from "../../config/jwt.js";
 import { AppError } from "../../utils/AppError.js";
 import * as returnService from "./return.service.js";
 import * as reasonService from "./reason.service.js";
@@ -89,8 +92,146 @@ export async function getItemEligibility(
   }
 }
 
+function normalizeDigits(str?: string | null): string {
+  if (!str) return "";
+  return str.replace(/\D/g, "");
+}
+
+function verifyPhoneMatch(input: string, candidate?: string | null): boolean {
+  if (!candidate) return false;
+  const d1 = normalizeDigits(input);
+  const d2 = normalizeDigits(candidate);
+  if (!d1 || !d2) return false;
+  if (d1 === d2) return true;
+  // If either has 10+ digits, compare the last 10 digits (national Indian mobile number)
+  if (d1.length >= 10 && d2.length >= 10) {
+    return d1.slice(-10) === d2.slice(-10);
+  }
+  return false;
+}
+
+function verifyEmailMatch(input: string, candidate?: string | null): boolean {
+  if (!candidate) return false;
+  return input.trim().toLowerCase() === candidate.trim().toLowerCase();
+}
+
+/**
+ * Public portal: Verify order by Order Number and Email OR Phone.
+ * If matched, returns order details, items eligibility, return reasons, and a signed 1-hour verification token.
+ */
+export async function lookupOrderForReturn(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { orderNumber, identifier } = req.body as {
+      orderNumber?: string;
+      identifier?: string;
+    };
+
+    if (!orderNumber || !String(orderNumber).trim()) {
+      throw new AppError(400, "Please provide your Order Number.");
+    }
+    if (!identifier || !String(identifier).trim()) {
+      throw new AppError(400, "Please provide your Email Address or Phone Number.");
+    }
+
+    const cleanOrderNumber = String(orderNumber).trim().replace(/^#/, "");
+    const cleanIdentifier = String(identifier).trim();
+
+    const isObjectId = mongoose.Types.ObjectId.isValid(cleanOrderNumber);
+    const escaped = cleanOrderNumber.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const order = await Order.findOne(
+      isObjectId
+        ? {
+            $or: [{ _id: cleanOrderNumber }, { orderNumber: new RegExp(`^${escaped}$`, "i") }],
+          }
+        : { orderNumber: new RegExp(`^${escaped}$`, "i") }
+    ).populate("customer", "name email phone");
+
+    if (!order) {
+      throw new AppError(
+        404,
+        "No order found with the provided Order Number. Please check your order confirmation details."
+      );
+    }
+
+    const customer = order.customer as any;
+    const shipping = (order.shippingAddress as any) || {};
+
+    let isMatch = false;
+
+    // 1. Check email match
+    if (
+      verifyEmailMatch(cleanIdentifier, customer?.email) ||
+      verifyEmailMatch(cleanIdentifier, shipping?.email)
+    ) {
+      isMatch = true;
+    }
+
+    // 2. Check phone match
+    if (
+      !isMatch &&
+      (verifyPhoneMatch(cleanIdentifier, customer?.phone) ||
+        verifyPhoneMatch(cleanIdentifier, shipping?.phone))
+    ) {
+      isMatch = true;
+    }
+
+    if (!isMatch) {
+      throw new AppError(
+        403,
+        `The email or phone number does not match the records for order ${order.orderNumber}. Please check your details and try again.`
+      );
+    }
+
+    const customerId = customer?._id?.toString() || order.customer?.toString();
+
+    const verificationToken = jwt.sign(
+      {
+        orderId: order._id.toString(),
+        orderNumber: order.orderNumber,
+        customerId,
+        purpose: "return_exchange",
+      },
+      jwtConfig.secret,
+      { expiresIn: "1h" }
+    );
+
+    const eligibilities = await calculateOrderItemsEligibility(order);
+    const reasons = await reasonService.getActiveReasons();
+
+    const orderStatus = order.orderStatus || order.status;
+    const isDelivered =
+      order.orderStatus === "DELIVERED" || (order.status as string) === "delivered";
+
+    res.json({
+      verified: true,
+      verificationToken,
+      order: {
+        _id: order._id,
+        orderNumber: order.orderNumber,
+        orderStatus,
+        status: order.status,
+        isDelivered,
+        deliveredAt: order.shippingInfo?.deliveredAt || order.updatedAt,
+        items: eligibilities,
+        shippingAddress: order.shippingAddress,
+        total: order.total,
+        currency: order.currency || "INR",
+      },
+      reasons,
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
 /**
  * Customer creates a return or exchange request.
+ * Supports both logged-in sessions and verified portal sessions via verificationToken.
  */
 export async function postCreateReturnRequest(
   req: Request,
@@ -98,8 +239,7 @@ export async function postCreateReturnRequest(
   next: NextFunction
 ): Promise<void> {
   try {
-    const customerId = (req as any).customerId;
-    if (!customerId) throw new AppError(401, "Unauthorized");
+    let customerId = (req as any).customerId;
 
     const {
       orderId,
@@ -111,6 +251,7 @@ export async function postCreateReturnRequest(
       exchangeDetails,
       bankDetails,
       evidenceFiles,
+      verificationToken,
     } = req.body as {
       orderId?: string;
       items?: { product: string; quantity: number; size?: string }[];
@@ -127,10 +268,34 @@ export async function postCreateReturnRequest(
         upiId?: string;
       };
       evidenceFiles?: { fileUrl: string; fileType: "IMAGE" | "VIDEO"; mimeType?: string }[];
+      verificationToken?: string;
     };
 
     if (!orderId || !items?.length || !reason) {
       throw new AppError(400, "orderId, items, and reason are required");
+    }
+
+    if (!customerId && verificationToken) {
+      try {
+        const decoded = jwt.verify(verificationToken, jwtConfig.secret) as any;
+        if (decoded?.purpose !== "return_exchange") {
+          throw new AppError(401, "Invalid return verification session");
+        }
+        if (decoded.orderId !== String(orderId) && decoded.orderNumber !== String(orderId)) {
+          throw new AppError(403, "Verification token does not match target order");
+        }
+        customerId = decoded.customerId;
+      } catch (err: any) {
+        if (err instanceof AppError) throw err;
+        throw new AppError(401, "Verification session expired. Please find your order again.");
+      }
+    }
+
+    if (!customerId) {
+      throw new AppError(
+        401,
+        "Unauthorized: Please verify your order or log in to submit a return request"
+      );
     }
 
     const returnDoc = await returnService.createReturnRequest({

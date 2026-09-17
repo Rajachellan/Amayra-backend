@@ -1,4 +1,9 @@
-export { authenticateAdmin, authenticateCustomer, authenticateSuperAdmin } from "./authenticate.js";
+export {
+  authenticateAdmin,
+  authenticateCustomer,
+  optionalAuthenticateCustomer,
+  authenticateSuperAdmin,
+} from "./authenticate.js";
 export type { AdminJwtPayload, CustomerJwtPayload } from "./authenticate.js";
 export { errorHandler } from "./errorHandler.js";
 export { requestIdMiddleware } from "./requestId.js";
@@ -11,6 +16,7 @@ export {
   adminLoginRateLimiter,
   otpRateLimiter,
   paymentRateLimiter,
+  returnLookupRateLimiter,
   authSlowDown,
   otpSlowDown,
 } from "./rateLimiters.js";
