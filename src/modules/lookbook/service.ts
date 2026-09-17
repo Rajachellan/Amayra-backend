@@ -180,19 +180,38 @@ export async function updateLookbookDoc(id: string, body: LookbookBody) {
   if (body.coverImage !== undefined) doc.coverImage = body.coverImage ?? undefined;
   if (body.images != null) doc.images = body.images;
   if (body.galleryImages != null) {
-    doc.galleryImages = body.galleryImages.map((img) => ({
-      ...img,
-      hotspots: (img.hotspots ?? [])
+    doc.galleryImages = body.galleryImages.map((img) => {
+      const rawImg = img as unknown as { _id?: unknown; hotspots?: unknown[] };
+      const imageObjId =
+        rawImg._id && mongoose.isValidObjectId(String(rawImg._id))
+          ? new mongoose.Types.ObjectId(String(rawImg._id))
+          : new mongoose.Types.ObjectId();
+
+      const hotspots = (img.hotspots ?? [])
         .filter((h) =>
           Boolean(
             h.product && String(h.product).trim() && mongoose.isValidObjectId(String(h.product))
           )
         )
-        .map((h) => ({
-          ...h,
-          product: new mongoose.Types.ObjectId(String(h.product)),
-        })),
-    })) as never;
+        .map((h) => {
+          const rawH = h as unknown as { _id?: unknown };
+          const hotspotObjId =
+            rawH._id && mongoose.isValidObjectId(String(rawH._id))
+              ? new mongoose.Types.ObjectId(String(rawH._id))
+              : new mongoose.Types.ObjectId();
+          return {
+            ...h,
+            _id: hotspotObjId,
+            product: new mongoose.Types.ObjectId(String(h.product)),
+          };
+        });
+
+      return {
+        ...img,
+        _id: imageObjId,
+        hotspots,
+      };
+    }) as never;
   }
   if (body.seo != null) {
     doc.seo = {
@@ -226,7 +245,7 @@ export async function updateLookbookDoc(id: string, body: LookbookBody) {
 
   pushAudit(doc, "updated");
   await doc.save();
-  return doc;
+  return getLookbookById(String(doc._id));
 }
 
 export async function deleteLookbookDoc(id: string) {
@@ -248,18 +267,22 @@ export async function addLookbookImage(id: string, image: ImageBody) {
   } as never);
   pushAudit(doc, "image_added", { imageUrl: image.imageUrl });
   await doc.save();
-  return doc;
+  return getLookbookById(String(doc._id));
 }
 
 export async function deleteLookbookImage(id: string, imageId: string) {
   const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
-  const img = doc.galleryImages.id(imageId);
+  let img = doc.galleryImages.id(imageId);
+  if (!img && doc.galleryImages.length > 0) {
+    img =
+      doc.galleryImages.find((g) => String(g._id) === imageId || g.imageUrl === imageId) || null;
+  }
   if (!img) throw new AppError(404, "Image not found");
   img.deleteOne();
   pushAudit(doc, "image_deleted", { imageId });
   await doc.save();
-  return doc;
+  return getLookbookById(String(doc._id));
 }
 
 export async function reorderLookbookImages(id: string, imageIds: string[]) {
@@ -271,13 +294,18 @@ export async function reorderLookbookImages(id: string, imageIds: string[]) {
   });
   pushAudit(doc, "images_reordered");
   await doc.save();
-  return doc;
+  return getLookbookById(String(doc._id));
 }
 
 export async function addHotspot(id: string, imageId: string, hotspot: HotspotBody) {
   const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
-  const img = doc.galleryImages.id(imageId);
+  let img = doc.galleryImages.id(imageId);
+  if (!img && doc.galleryImages.length > 0) {
+    img =
+      doc.galleryImages.find((g) => String(g._id) === imageId || g.imageUrl === imageId) ||
+      (doc.galleryImages.length === 1 ? doc.galleryImages[0] : null);
+  }
   if (!img) throw new AppError(404, "Image not found");
   const productObjId =
     hotspot.product && mongoose.isValidObjectId(hotspot.product)
@@ -288,7 +316,7 @@ export async function addHotspot(id: string, imageId: string, hotspot: HotspotBo
     product: productObjId,
     sortOrder: hotspot.sortOrder ?? img.hotspots.length,
   } as never);
-  pushAudit(doc, "hotspot_added", { imageId, product: hotspot.product });
+  pushAudit(doc, "hotspot_added", { imageId: String(img._id), product: hotspot.product });
   await doc.save();
   return getLookbookById(String(doc._id));
 }
@@ -371,12 +399,20 @@ export async function updateHotspot(
 export async function deleteHotspot(id: string, imageId: string, hotspotId: string) {
   const doc = await findLookbookDoc(id);
   if (!doc) throw new AppError(404, "Not found");
-  const img = doc.galleryImages.id(imageId);
+  let img = doc.galleryImages.id(imageId);
+  if (!img && doc.galleryImages.length > 0) {
+    img =
+      doc.galleryImages.find((g) => String(g._id) === imageId || g.imageUrl === imageId) ||
+      (doc.galleryImages.length === 1 ? doc.galleryImages[0] : null);
+  }
   if (!img) throw new AppError(404, "Image not found");
-  const spot = img.hotspots.id(hotspotId);
+  let spot = img.hotspots.id(hotspotId);
+  if (!spot) {
+    spot = img.hotspots.find((h) => String(h._id) === hotspotId) || null;
+  }
   if (!spot) throw new AppError(404, "Hotspot not found");
   spot.deleteOne();
-  pushAudit(doc, "hotspot_deleted", { imageId, hotspotId });
+  pushAudit(doc, "hotspot_deleted", { imageId: String(img._id), hotspotId });
   await doc.save();
   return getLookbookById(String(doc._id));
 }
