@@ -3,11 +3,13 @@ import { createApp } from "./app/createApp.js";
 import { connectDatabase, env, logger, initSocketIO } from "./config/index.js";
 import { ensureAdminFromEnv } from "./utils/ensureAdmin.js";
 import { startReminderJob } from "./jobs/reminderJob.js";
+import { startReservationExpiryWorker } from "./modules/inventory/reservation-expiry.worker.js";
 
 async function main() {
   await connectDatabase();
   await ensureAdminFromEnv();
   startReminderJob();
+  startReservationExpiryWorker();
   const app = createApp();
   const server = createServer(app);
 

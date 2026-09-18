@@ -21,24 +21,42 @@ type WebhookBody = {
 };
 
 export async function postRazorpayWebhook(req: Request, res: Response): Promise<void> {
+  const isProd = process.env.NODE_ENV === "production";
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
   if (!secret) {
-    res.status(500).send("Webhook secret not configured");
+    if (isProd) {
+      logger.fatal(
+        "CRITICAL SECURITY ALERT: RAZORPAY_WEBHOOK_SECRET is missing in production environment!"
+      );
+      res.status(500).json({ error: "Configuration failure" });
+      return;
+    }
+    logger.warn(
+      "RAZORPAY_WEBHOOK_SECRET is not configured in development. Rejecting webhook request."
+    );
+    res.status(400).json({ error: "Webhook secret not configured" });
     return;
   }
 
   const sig = req.headers["x-razorpay-signature"];
   const signature = typeof sig === "string" ? sig : "";
+  if (!signature) {
+    logger.warn("Razorpay webhook received without x-razorpay-signature header");
+    res.status(400).json({ error: "Missing signature" });
+    return;
+  }
+
   const rawBuf = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
 
   let valid = false;
   try {
     valid = validateWebhookSignature(rawBuf.toString(), signature, secret);
-  } catch {
+  } catch (err) {
     valid = false;
   }
   if (!valid) {
-    res.status(400).send("Invalid signature");
+    logger.warn("Razorpay webhook signature verification failed");
+    res.status(400).json({ error: "Invalid signature" });
     return;
   }
 

@@ -10,6 +10,7 @@ import {
   listPickupLocations,
   type NormalizedPickup,
 } from "../../services/shiprocketService.js";
+import { buildShiprocketItem } from "../shipping/shipping.service.js";
 
 const BOOKABLE_STATUSES = ["paid", "processing", "shipped"] as const;
 
@@ -120,12 +121,7 @@ function buildAdhocPayload(args: {
     : new Date().toISOString().slice(0, 16).replace("T", " ");
 
   const prepaid = args.order.paymentMethod !== "cod";
-  const orderItems = args.order.items.map((it, i) => ({
-    name: it.name.slice(0, 200),
-    sku: (it.sku ?? `item-${i + 1}`).toString().slice(0, 50),
-    units: it.quantity,
-    selling_price: String(Math.round((it.lineTotal / Math.max(1, it.quantity)) * 100) / 100),
-  }));
+  const orderItems = args.order.items.map((it: any, i: number) => buildShiprocketItem(it, i));
 
   return {
     order_id: args.order.orderNumber.replace(/[^a-zA-Z0-9-_]/g, "-").slice(0, 48),

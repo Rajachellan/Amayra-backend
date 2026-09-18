@@ -17,6 +17,43 @@ export type CourierQuote = {
 /**
  * Validates order and retrieves normalized courier rates from Shiprocket.
  */
+/**
+ * Builds an adhoc item for Shiprocket fulfillment payloads.
+ * For promotional free gifts or ₹0 line items, assigns a nominal selling_price: "1.00"
+ * and discount: "1.00" to satisfy Shiprocket's non-zero price validation while ensuring
+ * invoice, payment amount, and MongoDB database totals remain ₹0.
+ */
+export function buildShiprocketItem(
+  item: any,
+  index = 0
+): {
+  name: string;
+  sku: string;
+  units: number;
+  selling_price: string;
+  discount?: string;
+} {
+  const isZeroPrice =
+    Number(item.lineTotal) === 0 || item.isPromotionalGift === true || item.sku === "GIFT799";
+
+  if (isZeroPrice) {
+    return {
+      name: (item.name || "Promotional Free Gift").slice(0, 200),
+      sku: (item.sku ?? `promo-gift-${index + 1}`).toString().slice(0, 50),
+      units: item.quantity || 1,
+      selling_price: "1.00",
+      discount: "1.00",
+    };
+  }
+
+  return {
+    name: (item.name || "Product").slice(0, 200),
+    sku: (item.sku ?? `item-${index + 1}`).toString().slice(0, 50),
+    units: item.quantity,
+    selling_price: String(Math.round((item.lineTotal / Math.max(1, item.quantity)) * 100) / 100),
+  };
+}
+
 export async function getCourierRates(
   orderId: string | mongoose.Types.ObjectId,
   weightKg: number,
@@ -113,12 +150,7 @@ export async function bookShipment(args: {
     : new Date().toISOString().slice(0, 16).replace("T", " ");
 
   const prepaid = order.paymentMethod !== "COD";
-  const orderItems = order.items.map((it, i) => ({
-    name: it.name.slice(0, 200),
-    sku: (it.sku ?? `item-${i + 1}`).toString().slice(0, 50),
-    units: it.quantity,
-    selling_price: String(Math.round((it.lineTotal / Math.max(1, it.quantity)) * 100) / 100),
-  }));
+  const orderItems = order.items.map((it: any, i: number) => buildShiprocketItem(it, i));
 
   const adhocPayload = {
     order_id: order.orderNumber.replace(/[^a-zA-Z0-9-_]/g, "-").slice(0, 48),

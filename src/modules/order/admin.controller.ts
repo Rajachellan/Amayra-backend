@@ -96,6 +96,11 @@ export async function putOrderAdminStatus(
     current.set("status", status);
     await current.save();
 
+    if (status === "cancelled") {
+      const { releaseInventoryReservations } = await import("../inventory/inventory.service.js");
+      await releaseInventoryReservations(current._id, "ADMIN_RELEASE", "ADMIN");
+    }
+
     const updated = await Order.findById(current._id)
       .populate("customer", "name email phone")
       .populate("payment", "status amount razorpayOrderId razorpayPaymentId method");

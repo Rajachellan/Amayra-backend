@@ -53,7 +53,7 @@ export async function buildOrderDraft(
 ): Promise<{
   orderNumber: string;
   items: {
-    product: mongoose.Types.ObjectId;
+    product?: mongoose.Types.ObjectId;
     name: string;
     slug: string;
     sku?: string;
@@ -61,6 +61,8 @@ export async function buildOrderDraft(
     quantity: number;
     lineTotal: number;
     image?: string;
+    isPromotionalGift?: boolean;
+    inventoryTracked?: boolean;
   }[];
   subtotal: number;
   discount: number;
@@ -85,7 +87,7 @@ export async function buildOrderDraft(
   });
 
   const items: {
-    product: mongoose.Types.ObjectId;
+    product?: mongoose.Types.ObjectId;
     name: string;
     slug: string;
     sku?: string;
@@ -93,6 +95,8 @@ export async function buildOrderDraft(
     quantity: number;
     lineTotal: number;
     image?: string;
+    isPromotionalGift?: boolean;
+    inventoryTracked?: boolean;
   }[] = [];
 
   for (const item of pricing.items) {
@@ -105,6 +109,8 @@ export async function buildOrderDraft(
       quantity: item.quantity,
       lineTotal: item.lineTotal,
       image: item.image,
+      isPromotionalGift: false,
+      inventoryTracked: true,
     });
   }
 
@@ -113,15 +119,22 @@ export async function buildOrderDraft(
 
   // Free Gift (only if enabled in admin settings and threshold unlocked)
   if (pricing.freeGift?.enabled && pricing.freeGift?.unlocked) {
+    let giftProduct = await Product.findOne({ sku: "GIFT799" }).lean();
+    if (!giftProduct) {
+      giftProduct = await Product.findOne({ isPromotionalGift: true }).lean();
+    }
+
     items.push({
-      product: new mongoose.Types.ObjectId("600000000000000000000799"),
-      name: pricing.freeGift.name || "Free Gift (Worth ₹799)",
-      slug: "free-gift-worth-799",
+      product: giftProduct?._id as mongoose.Types.ObjectId | undefined,
+      name: pricing.freeGift.name || giftProduct?.name || "Promotional Free Gift (Worth ₹799)",
+      slug: giftProduct?.slug || "free-gift-worth-799",
       sku: "GIFT799",
       unitPrice: 0,
       quantity: 1,
       lineTotal: 0,
-      image: "/images/gift-box.webp",
+      image: giftProduct?.images?.[0] || "/images/gift-box.webp",
+      isPromotionalGift: true,
+      inventoryTracked: false,
     });
   }
 
@@ -168,65 +181,90 @@ export async function createPendingOrderFromDraft(args: {
   const cid = new mongoose.Types.ObjectId(args.customerId);
   const d = args.draft;
 
-  const order = await Order.create({
-    orderNumber: d.orderNumber,
-    customer: cid,
-    items: d.items,
-    shippingAddress: {
-      fullName: args.shippingAddress.fullName.trim(),
-      phone: args.shippingAddress.phone.trim(),
-      line1: args.shippingAddress.line1.trim(),
-      city: args.shippingAddress.city.trim(),
-      state: args.shippingAddress.state.trim(),
-      pincode: args.shippingAddress.pincode.trim(),
-      country: (args.shippingAddress.country ?? "IN").trim() || "IN",
-    },
-    subtotal: d.subtotal,
-    discount: d.discount,
-    automaticDiscount: d.automaticDiscount,
-    couponDiscount: d.couponDiscount,
-    couponCode: d.couponCode,
-    taxableValue: d.taxableValue,
-    gstRate: d.gstRate,
-    gstAmount: d.gstAmount,
-    discountSlab: d.discountSlab,
-    tax: d.tax,
-    shipping: d.shipping,
-    total: d.total,
-    currency: "INR",
-    status: "pending_payment",
-    orderStatus: "PENDING",
-    paymentStatus: "PENDING",
-    shippingStatus: "NOT_CREATED",
-    returnStatus: "NOT_REQUESTED",
-    refundStatus: "NOT_APPLICABLE",
-    paymentMethod: "PREPAID",
-    paymentInfo: {
-      provider: "RAZORPAY",
-      razorpayOrderId: args.razorpayOrderId,
-      status: "PENDING",
-    },
-    shippingInfo: {
-      provider: "SHIPROCKET",
-      status: "NOT_CREATED",
-    },
-  });
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const [order] = await Order.create(
+      [
+        {
+          orderNumber: d.orderNumber,
+          customer: cid,
+          items: d.items,
+          shippingAddress: {
+            fullName: args.shippingAddress.fullName.trim(),
+            phone: args.shippingAddress.phone.trim(),
+            line1: args.shippingAddress.line1.trim(),
+            city: args.shippingAddress.city.trim(),
+            state: args.shippingAddress.state.trim(),
+            pincode: args.shippingAddress.pincode.trim(),
+            country: (args.shippingAddress.country ?? "IN").trim() || "IN",
+          },
+          subtotal: d.subtotal,
+          discount: d.discount,
+          automaticDiscount: d.automaticDiscount,
+          couponDiscount: d.couponDiscount,
+          couponCode: d.couponCode,
+          taxableValue: d.taxableValue,
+          gstRate: d.gstRate,
+          gstAmount: d.gstAmount,
+          discountSlab: d.discountSlab,
+          tax: d.tax,
+          shipping: d.shipping,
+          total: d.total,
+          currency: "INR",
+          status: "pending_payment",
+          orderStatus: "PENDING",
+          paymentStatus: "PENDING",
+          shippingStatus: "NOT_CREATED",
+          returnStatus: "NOT_REQUESTED",
+          refundStatus: "NOT_APPLICABLE",
+          paymentMethod: "PREPAID",
+          paymentInfo: {
+            provider: "RAZORPAY",
+            razorpayOrderId: args.razorpayOrderId,
+            status: "PENDING",
+          },
+          shippingInfo: {
+            provider: "SHIPROCKET",
+            status: "NOT_CREATED",
+          },
+        },
+      ],
+      { session }
+    );
 
-  const amountPaise = Math.round(d.total * 100);
+    // Create atomic inventory reservations within the same transaction
+    const { createInventoryReservations } = await import("../inventory/inventory.service.js");
+    await createInventoryReservations(session, cid, order._id, d.items);
 
-  const payment = await Payment.create({
-    order: order._id,
-    customer: cid,
-    razorpayOrderId: args.razorpayOrderId,
-    amount: amountPaise,
-    currency: "INR",
-    status: "created",
-  });
+    const amountPaise = Math.round(d.total * 100);
 
-  order.payment = payment._id;
-  await order.save();
+    const [payment] = await Payment.create(
+      [
+        {
+          order: order._id,
+          customer: cid,
+          razorpayOrderId: args.razorpayOrderId,
+          amount: amountPaise,
+          currency: "INR",
+          status: "created",
+        },
+      ],
+      { session }
+    );
 
-  return { order, payment };
+    order.payment = payment._id;
+    await order.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    return { order, payment };
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
 }
 
 import { processPrepaidPaymentCapture, processPaymentFailure } from "../payment/payment.service.js";

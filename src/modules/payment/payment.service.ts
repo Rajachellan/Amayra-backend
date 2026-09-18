@@ -46,8 +46,9 @@ export async function processPrepaidPaymentCapture(args: {
 
     const previousOrderStatus = order.orderStatus;
 
-    // 1. Decrement Stock atomically
-    await decrementStockForOrder(session, order, "RAZORPAY");
+    // 1. Convert Reservation to Sale atomically (without double-deducting available stock)
+    const { convertReservationsToSale } = await import("../inventory/inventory.service.js");
+    await convertReservationsToSale(session, order, payment._id.toString(), "RAZORPAY");
 
     // 2. Update Payment document
     payment.status = "captured";
@@ -138,4 +139,8 @@ export async function processPaymentFailure(
       failureReason: reason,
     },
   });
+
+  // Release any active inventory reservations
+  const { releaseInventoryReservations } = await import("../inventory/inventory.service.js");
+  await releaseInventoryReservations(order._id, reason || "PAYMENT_FAILED", "RAZORPAY");
 }

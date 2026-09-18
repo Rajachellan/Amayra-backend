@@ -11,6 +11,8 @@ const orderItemSchema = new Schema(
     lineTotal: { type: Number, required: true },
     image: { type: String },
     size: { type: String },
+    isPromotionalGift: { type: Boolean, default: false },
+    inventoryTracked: { type: Boolean, default: true },
     returnedQuantity: { type: Number, default: 0, min: 0 },
     exchangedQuantity: { type: Number, default: 0, min: 0 },
     lockedQuantity: { type: Number, default: 0, min: 0 },
