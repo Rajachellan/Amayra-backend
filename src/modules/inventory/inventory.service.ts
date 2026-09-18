@@ -10,7 +10,7 @@ import { recordOrderEvent } from "../order/order.service.js";
 export interface InventoryReservationLine {
   product?: mongoose.Types.ObjectId | string;
   productId?: mongoose.Types.ObjectId | string;
-  sku?: string;
+  sku?: string | null;
   quantity: number;
   unitPrice?: number;
   name?: string;

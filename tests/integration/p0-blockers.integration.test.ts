@@ -31,7 +31,15 @@ describe("P0 Integration Tests — MaiRii Jewellery E-Commerce Blockers", () => 
   });
 
   after(async () => {
-    await teardownTestDatabase();
+    await Promise.all([
+      Product.deleteMany({}),
+      Order.deleteMany({}),
+      Payment.deleteMany({}),
+      InventoryReservation.deleteMany({}),
+      InventoryLedger.deleteMany({}),
+      OrderHistory.deleteMany({}),
+      WebhookEvent.deleteMany({}),
+    ]);
   });
 
   beforeEach(async () => {
@@ -75,7 +83,7 @@ describe("P0 Integration Tests — MaiRii Jewellery E-Commerce Blockers", () => 
             [
               {
                 product: product._id,
-                sku: product.sku,
+                sku: product.sku ?? undefined,
                 quantity: 1,
                 unitPrice: product.price,
               },
@@ -131,7 +139,7 @@ describe("P0 Integration Tests — MaiRii Jewellery E-Commerce Blockers", () => 
         [
           {
             product: product._id,
-            sku: product.sku,
+            sku: product.sku ?? undefined,
             quantity: 2,
             unitPrice: product.price,
           },
@@ -339,7 +347,7 @@ describe("P0 Integration Tests — MaiRii Jewellery E-Commerce Blockers", () => 
         [
           {
             product: regularProduct._id,
-            sku: regularProduct.sku,
+            sku: regularProduct.sku ?? undefined,
             quantity: 1,
             unitPrice: 7500,
             inventoryTracked: true,
