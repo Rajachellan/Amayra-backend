@@ -4,10 +4,12 @@ import { connectDatabase, env, logger, initSocketIO } from "./config/index.js";
 import { ensureAdminFromEnv } from "./utils/ensureAdmin.js";
 import { startReminderJob } from "./jobs/reminderJob.js";
 import { startReservationExpiryWorker } from "./modules/inventory/reservation-expiry.worker.js";
+import { runP0Migration } from "./migrations/migrate-p0-indexes.js";
 
 async function main() {
   await connectDatabase();
   await ensureAdminFromEnv();
+  await runP0Migration().catch((err) => logger.warn(err, "P0 migration auto-check"));
   startReminderJob();
   startReservationExpiryWorker();
   const app = createApp();

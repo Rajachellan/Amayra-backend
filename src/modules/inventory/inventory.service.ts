@@ -121,7 +121,8 @@ export async function createInventoryReservations(
       {
         _id: pid,
         stock: { $gte: data.qty },
-        inventoryTracked: true,
+        inventoryTracked: { $ne: false },
+        isPromotionalGift: { $ne: true },
       },
       {
         $inc: {
