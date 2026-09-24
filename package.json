@@ -11,6 +11,7 @@
     "seed": "node dist/seed/seed.js",
     "seed:dev": "tsx src/seed/seed.ts",
     "seed:clean": "tsx src/seed/wipe.ts",
+    "verify:integrations": "tsx scripts/verify-integrations.ts",
     "test": "tsx --test tests/unit/**/*.test.ts tests/integration/**/*.test.ts",
     "test:unit": "tsx --test tests/unit/**/*.test.ts",
     "test:integration": "tsx --test tests/integration/**/*.test.ts",

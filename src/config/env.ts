@@ -41,6 +41,7 @@ const envSchema = z
     SHIPROCKET_EMAIL: z.string().optional(),
     SHIPROCKET_PASSWORD: z.string().optional(),
     SHIPROCKET_BASE_URL: z.string().default("https://apiv2.shiprocket.in"),
+    SHIPROCKET_WEBHOOK_TOKEN: z.string().optional(),
     GOOGLE_CLIENT_ID: z.string().optional(),
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error", "fatal", "trace"]).default("info"),
