@@ -93,8 +93,56 @@ export async function putOrderAdminStatus(
       throw new AppError(400, "This order cannot be updated from admin");
     }
 
+    const previousStatus = current.status;
+    const previousOrderStatus = current.orderStatus;
+
     current.set("status", status);
+    if (status === "delivered") {
+      current.set("orderStatus", "DELIVERED");
+      current.set("shippingStatus", "DELIVERED");
+      if (!current.shippingInfo) current.shippingInfo = {} as any;
+      current.shippingInfo.status = "DELIVERED";
+      if (!current.shippingInfo.deliveredAt) {
+        current.shippingInfo.deliveredAt = new Date();
+      }
+      if (current.shiprocket) {
+        current.shiprocket.lastStatus = "DELIVERED";
+        current.shiprocket.syncedAt = new Date();
+      }
+      if (current.paymentMethod === "COD" && current.paymentStatus !== "COD_COLLECTED") {
+        current.set("paymentStatus", "COD_COLLECTED");
+        if (current.paymentInfo) {
+          current.paymentInfo.status = "COD_COLLECTED";
+          current.paymentInfo.codCollectedAt = new Date();
+        }
+      }
+    } else if (status === "shipped") {
+      current.set("orderStatus", "SHIPPED");
+      if (!current.shippingStatus || current.shippingStatus === "NOT_CREATED") {
+        current.set("shippingStatus", "SHIPPED");
+      }
+      if (!current.shippingInfo) current.shippingInfo = {} as any;
+      if (!current.shippingInfo.shippedAt) {
+        current.shippingInfo.shippedAt = new Date();
+      }
+    } else if (status === "processing") {
+      current.set("orderStatus", "PROCESSING");
+    } else if (status === "cancelled") {
+      current.set("orderStatus", "CANCELLED");
+      current.set("shippingStatus", "CANCELLED");
+    }
+
     await current.save();
+
+    const { recordOrderEvent } = await import("./order.service.js");
+    await recordOrderEvent({
+      orderId: current._id,
+      eventType: status === "delivered" ? "ORDER_DELIVERED" : "ORDER_STATUS_CHANGED",
+      previousStatus: previousOrderStatus || previousStatus,
+      newStatus: current.orderStatus || status,
+      source: "ADMIN",
+      metadata: { adminStatusUpdate: status },
+    });
 
     if (status === "cancelled") {
       const { releaseInventoryReservations } = await import("../inventory/inventory.service.js");

@@ -173,3 +173,46 @@ export async function postShiprocketWebhook(req: Request, res: Response): Promis
     res.status(500).json({ ok: false, error: err.message });
   }
 }
+
+/**
+ * Manually syncs live tracking status from Shiprocket for a specific order.
+ */
+export async function postSyncOrderShiprocketTracking(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    const result = await shippingService.syncShiprocketTrackingForOrder(id, "ADMIN");
+    res.json({
+      success: true,
+      message: `Shipment status synced successfully: ${result.order.orderStatus}`,
+      order: result.order,
+      tracking: result.tracking,
+      updated: result.updated,
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Syncs all active orders with Shiprocket.
+ */
+export async function postSyncAllActiveShipments(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const result = await shippingService.syncAllActiveShipments();
+    res.json({
+      success: true,
+      message: `Tracking sync completed. Checked ${result.totalChecked} shipments, updated ${result.totalUpdated}.`,
+      ...result,
+    });
+  } catch (e) {
+    next(e);
+  }
+}

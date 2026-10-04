@@ -290,12 +290,15 @@ export async function processShiprocketTrackingUpdate(
   order.shippingStatus = mappedShipping;
   order.shippingInfo.status = mappedShipping;
 
-  if (rawPayload.etd || rawPayload.edd) {
-    order.shippingInfo.estimatedDeliveryDate = new Date(rawPayload.etd || rawPayload.edd);
+  if (order.shiprocket) {
+    order.shiprocket.lastStatus = mappedShipping;
+    order.shiprocket.syncedAt = new Date();
   }
 
   if (mappedShipping === "DELIVERED") {
-    order.shippingInfo.deliveredAt = new Date();
+    if (!order.shippingInfo.deliveredAt) {
+      order.shippingInfo.deliveredAt = new Date();
+    }
     if (order.paymentMethod === "COD") {
       order.paymentStatus = "COD_COLLECTED";
       order.paymentInfo.status = "COD_COLLECTED";
@@ -309,6 +312,18 @@ export async function processShiprocketTrackingUpdate(
   const mappedOrder = mapShippingToOrderStatus(mappedShipping);
   if (mappedOrder) {
     order.orderStatus = mappedOrder;
+    const statusMap: Record<string, string> = {
+      PENDING: "pending_payment",
+      CONFIRMED: "paid",
+      PROCESSING: "processing",
+      SHIPPED: "shipped",
+      OUT_FOR_DELIVERY: "shipped",
+      DELIVERED: "delivered",
+      CANCELLED: "cancelled",
+      RTO: "failed",
+      COMPLETED: "delivered",
+    };
+    order.status = (statusMap[mappedOrder] as any) || order.status;
   }
 
   await order.save();
@@ -334,4 +349,135 @@ export async function processShiprocketTrackingUpdate(
       payload: rawPayload,
     },
   });
+}
+
+/**
+ * Idempotently and comprehensively syncs tracking status from Shiprocket API for a given order.
+ */
+export async function syncShiprocketTrackingForOrder(
+  orderIdOrDoc: string | mongoose.Types.ObjectId | any,
+  source: "ADMIN" | "CUSTOMER" | "SYSTEM" | "SHIPROCKET" = "ADMIN"
+): Promise<{ order: any; tracking: any; updated: boolean }> {
+  let order =
+    typeof orderIdOrDoc === "string" || orderIdOrDoc instanceof mongoose.Types.ObjectId
+      ? await Order.findById(orderIdOrDoc)
+      : orderIdOrDoc;
+
+  if (!order) throw new AppError(404, "Order not found");
+
+  const awbCode = order.shippingInfo?.awbCode || order.shiprocket?.awbCode;
+  if (!awbCode) {
+    throw new AppError(
+      400,
+      `Order ${order.orderNumber} does not have an active AWB code to track.`
+    );
+  }
+
+  const tracking = await shiprocketClient.trackByAwb(awbCode);
+  const rawStatus = tracking.currentStatus || "";
+  if (!rawStatus) {
+    return { order, tracking, updated: false };
+  }
+
+  const prevOrderStatus = order.orderStatus;
+  const mappedShipping = mapShiprocketToMairiiShippingStatus(rawStatus);
+
+  order.shippingStatus = mappedShipping;
+  if (!order.shippingInfo) order.shippingInfo = {} as any;
+  order.shippingInfo.status = mappedShipping;
+
+  if (tracking.expectedDelivery) {
+    order.shippingInfo.estimatedDeliveryDate = new Date(tracking.expectedDelivery);
+  }
+
+  if (order.shiprocket) {
+    order.shiprocket.lastStatus = mappedShipping;
+    order.shiprocket.syncedAt = new Date();
+  }
+
+  if (mappedShipping === "DELIVERED") {
+    if (!order.shippingInfo.deliveredAt) {
+      order.shippingInfo.deliveredAt = new Date();
+    }
+    if (order.paymentMethod === "COD" && order.paymentStatus !== "COD_COLLECTED") {
+      order.paymentStatus = "COD_COLLECTED";
+      if (!order.paymentInfo) order.paymentInfo = {} as any;
+      order.paymentInfo.status = "COD_COLLECTED";
+      order.paymentInfo.codCollectedAt = new Date();
+    }
+  } else if (mappedShipping === "PICKED_UP" && !order.shippingInfo.shippedAt) {
+    order.shippingInfo.shippedAt = new Date();
+  }
+
+  const mappedOrder = mapShippingToOrderStatus(mappedShipping);
+  if (mappedOrder) {
+    order.orderStatus = mappedOrder;
+    const statusMap: Record<string, string> = {
+      PENDING: "pending_payment",
+      CONFIRMED: "paid",
+      PROCESSING: "processing",
+      SHIPPED: "shipped",
+      OUT_FOR_DELIVERY: "shipped",
+      DELIVERED: "delivered",
+      CANCELLED: "cancelled",
+      RTO: "failed",
+      COMPLETED: "delivered",
+    };
+    order.status = (statusMap[mappedOrder] as any) || order.status;
+  }
+
+  await order.save();
+
+  // Record audit history
+  let eventType = "SHIPMENT_TRACKING_SYNCED";
+  if (mappedShipping === "DELIVERED") {
+    eventType = "SHIPMENT_DELIVERED";
+  } else if (mappedShipping.startsWith("RTO_")) {
+    eventType = "SHIPMENT_RTO_INITIATED";
+  }
+
+  await recordOrderEvent({
+    orderId: order._id,
+    eventType,
+    previousStatus: prevOrderStatus,
+    newStatus: order.orderStatus,
+    source,
+    metadata: {
+      awbCode,
+      rawStatus,
+      mappedShippingStatus: mappedShipping,
+      trackingUrl: tracking.trackingUrl,
+      currentStatus: tracking.currentStatus,
+    },
+  });
+
+  return { order, tracking, updated: true };
+}
+
+/**
+ * Periodically polls Shiprocket for all active orders that are in transit/processing.
+ */
+export async function syncAllActiveShipments(): Promise<{
+  totalChecked: number;
+  totalUpdated: number;
+}> {
+  const activeOrders = await Order.find({
+    orderStatus: { $in: ["PROCESSING", "SHIPPED", "OUT_FOR_DELIVERY"] },
+    $or: [
+      { "shippingInfo.awbCode": { $exists: true, $ne: "" } },
+      { "shiprocket.awbCode": { $exists: true, $ne: "" } },
+    ],
+  });
+
+  let totalUpdated = 0;
+  for (const order of activeOrders) {
+    try {
+      const res = await syncShiprocketTrackingForOrder(order, "SYSTEM");
+      if (res.updated) totalUpdated++;
+    } catch (err: any) {
+      logger.warn(`Failed background sync for order ${order.orderNumber}: ${err.message}`);
+    }
+  }
+
+  return { totalChecked: activeOrders.length, totalUpdated };
 }

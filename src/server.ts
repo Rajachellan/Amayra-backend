@@ -3,6 +3,7 @@ import { createApp } from "./app/createApp.js";
 import { connectDatabase, env, logger, initSocketIO } from "./config/index.js";
 import { ensureAdminFromEnv } from "./utils/ensureAdmin.js";
 import { startReminderJob } from "./jobs/reminderJob.js";
+import { startTrackingSyncJob } from "./jobs/trackingSyncJob.js";
 import { startReservationExpiryWorker } from "./modules/inventory/reservation-expiry.worker.js";
 import { runP0Migration } from "./migrations/migrate-p0-indexes.js";
 
@@ -11,6 +12,7 @@ async function main() {
   await ensureAdminFromEnv();
   await runP0Migration().catch((err) => logger.warn(err, "P0 migration auto-check"));
   startReminderJob();
+  startTrackingSyncJob();
   startReservationExpiryWorker();
   const app = createApp();
   const server = createServer(app);

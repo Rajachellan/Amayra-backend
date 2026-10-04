@@ -47,15 +47,19 @@ export async function calculateOrderItemsEligibility(
   }
 
   // Delivery date calculation
+  // If the delivery status in DB was updated later than deliveredAt (e.g. delayed sync or webhook delay),
+  // ensure the customer gets at least the full return window starting from when the system marked it DELIVERED.
   const deliveredAt = order.shippingInfo?.deliveredAt || order.updatedAt || order.createdAt;
   const deliveredTime = new Date(deliveredAt).getTime();
+  const lastSyncTime = order.updatedAt ? new Date(order.updatedAt).getTime() : deliveredTime;
+  const effectiveDeliveredTime = Math.max(deliveredTime, lastSyncTime);
   const now = Date.now();
 
   const RETURN_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
   const EXCHANGE_WINDOW_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
 
-  const returnWindowExpiresAt = new Date(deliveredTime + RETURN_WINDOW_MS);
-  const exchangeWindowExpiresAt = new Date(deliveredTime + EXCHANGE_WINDOW_MS);
+  const returnWindowExpiresAt = new Date(effectiveDeliveredTime + RETURN_WINDOW_MS);
+  const exchangeWindowExpiresAt = new Date(effectiveDeliveredTime + EXCHANGE_WINDOW_MS);
 
   const isReturnWithinWindow = now <= returnWindowExpiresAt.getTime();
   const isExchangeWithinWindow = now <= exchangeWindowExpiresAt.getTime();

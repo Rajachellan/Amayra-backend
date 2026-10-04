@@ -220,6 +220,18 @@ router.post(
   requirePermission("orders:write"),
   shiprocketAdminController.postOrderShiprocketShipment
 );
+router.post(
+  "/admin/orders/:id/shiprocket/sync",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  shiprocketAdminController.postSyncOrderShiprocketTracking
+);
+router.post(
+  "/admin/orders/shiprocket/sync-all",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  shiprocketAdminController.postSyncAllActiveShipments
+);
 router.get("/admin/orders/:id", authenticateAdmin, orderAdminController.getOrderAdmin);
 router.put(
   "/admin/orders/:id/status",

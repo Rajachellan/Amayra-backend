@@ -288,21 +288,29 @@ export async function getMyOrderTracking(
     }
 
     let tracking = null;
+    let currentOrderDoc: any = order;
     try {
-      tracking = await trackByAwb(shiprocket.awbCode);
+      const { syncShiprocketTrackingForOrder } = await import("../shipping/shipping.service.js");
+      const syncRes = await syncShiprocketTrackingForOrder(order._id, "CUSTOMER");
+      tracking = syncRes.tracking;
+      currentOrderDoc = syncRes.order;
     } catch {
-      tracking = {
-        awbCode: shiprocket.awbCode,
-        trackingUrl: shiprocket.trackingUrl,
-        currentStatus: shiprocket.lastStatus,
-        activities: [],
-        message: "Live tracking is temporarily unavailable. Use the track link below.",
-      };
+      try {
+        tracking = await trackByAwb(shiprocket.awbCode);
+      } catch {
+        tracking = {
+          awbCode: shiprocket.awbCode,
+          trackingUrl: shiprocket.trackingUrl,
+          currentStatus: shiprocket.lastStatus,
+          activities: [],
+          message: "Live tracking is temporarily unavailable. Use the track link below.",
+        };
+      }
     }
 
     res.json({
-      orderStatus: order.status,
-      shiprocket,
+      orderStatus: currentOrderDoc.status || currentOrderDoc.orderStatus,
+      shiprocket: sanitizeShiprocket(currentOrderDoc.shiprocket),
       tracking,
     });
   } catch (e) {
