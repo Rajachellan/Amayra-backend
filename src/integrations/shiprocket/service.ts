@@ -303,14 +303,23 @@ export async function createReturnOrder(
   })) as Record<string, unknown>;
 
   const errs = data.errors ?? data.errors_message;
-  if (errs !== undefined && errs !== null && String(errs).length > 1) {
-    const msg =
-      typeof data.message === "string"
-        ? data.message
-        : typeof errs === "string"
-          ? errs
-          : JSON.stringify(errs);
-    throw new AppError(502, msg);
+  if (
+    errs !== undefined &&
+    errs !== null &&
+    (typeof errs === "object" || String(errs).length > 1)
+  ) {
+    let msg = "";
+    if (typeof errs === "object") {
+      msg = Object.entries(errs as Record<string, unknown>)
+        .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v)}`)
+        .join("; ");
+    } else {
+      msg = String(errs);
+    }
+    throw new AppError(
+      502,
+      msg || (typeof data.message === "string" ? data.message : "Shiprocket validation failed")
+    );
   }
   if (typeof data.status_code === "number" && data.status_code >= 400) {
     srThrow(data, "Shiprocket create return order failed");

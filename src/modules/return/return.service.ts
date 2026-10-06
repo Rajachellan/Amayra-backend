@@ -212,13 +212,15 @@ export async function approveReturn(returnId: string, adminId: string): Promise<
   }));
 
   const warehousePayload = {
-    shipping_customer_name: "Mairii Jewels Warehouse",
-    shipping_address: "123 Warehouse St, Industrial Area",
-    shipping_city: "Jaipur",
-    shipping_state: "Rajasthan",
+    shipping_customer_name: "Bandana Chadha",
+    shipping_address: "A 1001, 10th floor, Casagrand Crescendo, Mela Ayamnabakkam",
+    shipping_address_2: "Next to Decathlon, Mogappair, Maduravoyal",
+    shipping_city: "Tiruvallur",
+    shipping_state: "Tamil Nadu",
     shipping_country: "India",
-    shipping_pincode: "302001",
-    shipping_phone: "9999999999",
+    shipping_pincode: "600095",
+    shipping_phone: "8433918383",
+    shipping_email: "connect@gemsofsreeamala.com",
   };
 
   const reverseAdhocPayload = {
@@ -230,7 +232,8 @@ export async function approveReturn(returnId: string, adminId: string): Promise<
     pickup_city: order.shippingAddress.city,
     pickup_state: order.shippingAddress.state,
     pickup_pincode: order.shippingAddress.pincode.replace(/\s/g, ""),
-    pickup_phone: order.shippingAddress.phone.replace(/\D/g, "").slice(0, 15),
+    pickup_country: "India",
+    pickup_phone: order.shippingAddress.phone.replace(/\D/g, "").slice(-10),
     pickup_email: customerEmail,
     ...warehousePayload,
     order_items: itemsPayload,
@@ -276,9 +279,10 @@ export async function approveReturn(returnId: string, adminId: string): Promise<
     reverseDetails.reverseTrackingUrl = awb ? `https://shiprocket.co/tracking/${awb}` : "";
     reverseDetails.courierStatus = "PICKUP_SCHEDULED";
   } catch (err: any) {
-    logger.error(
-      { err },
-      "Failed booking reverse pickup with Shiprocket. Approving request anyway."
+    logger.error({ err }, "Failed booking reverse pickup with Shiprocket.");
+    throw new AppError(
+      502,
+      `Shiprocket reverse pickup failed: ${err.message || "Unknown error"}. Return was not approved.`
     );
   }
 
@@ -444,6 +448,74 @@ export async function reschedulePickup(
     reason: args.reason || "Pickup rescheduled by admin",
     status: "RESCHEDULED",
   });
+
+  // If Shiprocket reverse shipment was not created yet (e.g. initial attempt failed), attempt booking now
+  if (!pickup.reverseShipmentId) {
+    const order = await Order.findById(returnDoc.orderId).populate("customer", "email name phone");
+    if (order) {
+      const cust = order.customer as any;
+      const customerEmail = cust?.email?.trim() || "customer@mairiijewels.com";
+      const returnDate = new Date(returnDoc.createdAt).toISOString().slice(0, 10);
+      const itemsPayload = returnDoc.items.map((it, idx) => ({
+        name: it.name.slice(0, 200),
+        sku: it.sku || `ret-${idx + 1}`,
+        units: it.quantity,
+        selling_price: String(it.unitPrice),
+      }));
+
+      const reverseAdhocPayload = {
+        order_id: returnDoc.returnNumber,
+        order_date: returnDate,
+        pickup_customer_name: order.shippingAddress.fullName.split(" ")[0] || "Customer",
+        pickup_last_name: order.shippingAddress.fullName.split(" ").slice(1).join(" ") || ".",
+        pickup_address: order.shippingAddress.line1,
+        pickup_city: order.shippingAddress.city,
+        pickup_state: order.shippingAddress.state,
+        pickup_pincode: order.shippingAddress.pincode.replace(/\s/g, ""),
+        pickup_country: "India",
+        pickup_phone: order.shippingAddress.phone.replace(/\D/g, "").slice(-10),
+        pickup_email: customerEmail,
+        shipping_customer_name: "Bandana Chadha",
+        shipping_address: "A 1001, 10th floor, Casagrand Crescendo, Mela Ayamnabakkam",
+        shipping_address_2: "Next to Decathlon, Mogappair, Maduravoyal",
+        shipping_city: "Tiruvallur",
+        shipping_state: "Tamil Nadu",
+        shipping_country: "India",
+        shipping_pincode: "600095",
+        shipping_phone: "8433918383",
+        shipping_email: "connect@gemsofsreeamala.com",
+        order_items: itemsPayload,
+        payment_method: "Prepaid",
+        sub_total: returnDoc.settlementDetails?.settlementAmount || 0,
+        length: 10,
+        breadth: 10,
+        height: 5,
+        weight: 0.35,
+      };
+
+      try {
+        logger.info(
+          `Creating Shiprocket Reverse Order on reschedule for: ${returnDoc.returnNumber}`
+        );
+        const srRes: any = await shiprocketClient.createReturnOrder(reverseAdhocPayload);
+        pickup.reverseShipmentId = String(srRes.shipment_id || srRes.payload?.shipment_id || "");
+        pickup.reverseAwb = String(srRes.awb_code || srRes.payload?.awb_code || "");
+        pickup.reverseCourier = String(
+          srRes.courier_name || srRes.payload?.courier_name || "Shiprocket Courier"
+        );
+        pickup.reverseTrackingUrl = pickup.reverseAwb
+          ? `https://shiprocket.co/tracking/${pickup.reverseAwb}`
+          : "";
+        pickup.courierStatus = "PICKUP_SCHEDULED";
+      } catch (err: any) {
+        logger.error({ err }, "Retry booking reverse pickup with Shiprocket failed.");
+        throw new AppError(
+          502,
+          `Shiprocket pickup reschedule failed: ${err.message || "Unknown error"}.`
+        );
+      }
+    }
+  }
 
   returnDoc.pickupDetails = pickup;
   await returnDoc.save();
