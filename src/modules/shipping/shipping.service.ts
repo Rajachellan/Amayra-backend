@@ -390,6 +390,13 @@ export async function syncShiprocketTrackingForOrder(
     order.shippingInfo.estimatedDeliveryDate = new Date(tracking.expectedDelivery);
   }
 
+  if (tracking.courierName) {
+    order.shippingInfo.courierName = tracking.courierName;
+    if (order.shiprocket) {
+      order.shiprocket.courierName = tracking.courierName;
+    }
+  }
+
   if (order.shiprocket) {
     order.shiprocket.lastStatus = mappedShipping;
     order.shiprocket.syncedAt = new Date();

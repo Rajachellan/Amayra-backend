@@ -69,7 +69,7 @@ export async function putOrderAdminStatus(
   try {
     const { id } = req.params;
     const { status } = req.body as { status?: string };
-    const allowed = ["processing", "shipped", "delivered", "cancelled"] as const;
+    const allowed = ["paid", "processing", "shipped", "delivered", "cancelled"] as const;
     if (!status || !allowed.includes(status as (typeof allowed)[number])) {
       throw new AppError(400, `Invalid status. Use one of: ${allowed.join(", ")}`);
     }
@@ -127,6 +127,8 @@ export async function putOrderAdminStatus(
       }
     } else if (status === "processing") {
       current.set("orderStatus", "PROCESSING");
+    } else if (status === "paid") {
+      current.set("orderStatus", "CONFIRMED");
     } else if (status === "cancelled") {
       current.set("orderStatus", "CANCELLED");
       current.set("shippingStatus", "CANCELLED");
