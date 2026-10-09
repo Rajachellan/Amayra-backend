@@ -4,8 +4,13 @@ import { Product } from "../../models/Product.js";
 import { Collection } from "../../models/Collection.js";
 import { AppError } from "../../utils/AppError.js";
 import { toSlug } from "../../utils/slug.js";
-import { resolveCategoryIdBySlug } from "../../services/categoryService.js";
+import {
+  resolveCategoryIdBySlug,
+  resolveCategoryIdsIncludingDescendants,
+} from "../../services/categoryService.js";
 import { resolveOccasionIdBySlug } from "../../services/occasionService.js";
+
+import { Occasion } from "../../models/Occasion.js";
 
 function publishedFilter(extra: Record<string, unknown> = {}) {
   // stock: { $gt: 0 } hides out-of-stock products from all public storefront queries
@@ -41,12 +46,16 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
       subCategory,
       section,
       collection,
+      collections,
       occasion,
+      occasions,
       featured,
       trending,
       masterpiece,
       q,
       color,
+      colors,
+      minPrice,
       maxPrice,
       page = "1",
       limit = "24",
@@ -60,12 +69,12 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
       since.setDate(since.getDate() - 90);
       filter.$or = [{ newArrival: true }, { createdAt: { $gte: since } }];
     } else if (typeof category === "string" && category && category !== "all") {
-      const cid = await resolveCategoryIdBySlug(category);
-      if (!cid) {
+      const cids = await resolveCategoryIdsIncludingDescendants(category);
+      if (cids.length === 0) {
         res.json({ items: [], total: 0, page: 1, pages: 0 });
         return;
       }
-      filter.$or = [{ category: cid }, { subCategory: cid }];
+      filter.$or = [{ category: { $in: cids } }, { subCategory: { $in: cids } }];
     }
     if (typeof subCategory === "string" && subCategory && subCategory !== "all") {
       const sid = await resolveCategoryIdBySlug(subCategory);
@@ -74,38 +83,74 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     if (typeof section === "string" && section) {
       filter.sections = section;
     }
-    if (typeof collection === "string" && collection.trim()) {
-      const col = await Collection.findOne({ slug: collection.trim(), active: true }).select("_id");
-      if (!col) {
-        res.json({ items: [], total: 0, page: 1, pages: 0 });
-        return;
+
+    const rawCollections = collections || collection;
+    if (rawCollections) {
+      const colSlugs = (
+        Array.isArray(rawCollections) ? rawCollections.join(",") : String(rawCollections)
+      )
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (colSlugs.length > 0) {
+        const foundCols = await Collection.find({ slug: { $in: colSlugs }, active: true }).select(
+          "_id"
+        );
+        if (foundCols.length === 0) {
+          res.json({ items: [], total: 0, page: 1, pages: 0 });
+          return;
+        }
+        filter.collections = { $in: foundCols.map((c) => c._id) };
       }
-      filter.collections = col._id;
     }
-    if (typeof occasion === "string" && occasion.trim()) {
-      const oid = await resolveOccasionIdBySlug(occasion.trim());
-      if (!oid) {
-        res.json({ items: [], total: 0, page: 1, pages: 0 });
-        return;
+
+    const rawOccasions = occasions || occasion;
+    if (rawOccasions) {
+      const occSlugs = (Array.isArray(rawOccasions) ? rawOccasions.join(",") : String(rawOccasions))
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (occSlugs.length > 0) {
+        const foundOccs = await Occasion.find({ slug: { $in: occSlugs }, active: true }).select(
+          "_id"
+        );
+        if (foundOccs.length === 0) {
+          res.json({ items: [], total: 0, page: 1, pages: 0 });
+          return;
+        }
+        filter.occasions = { $in: foundOccs.map((o) => o._id) };
       }
-      filter.occasions = oid;
     }
+
     if (featured === "true") filter.featured = true;
     if (trending === "true") filter.trending = true;
     if (masterpiece === "true") filter.masterpiece = true;
     if (typeof q === "string" && q.trim()) {
       filter.name = { $regex: q.trim(), $options: "i" };
     }
-    if (typeof color === "string" && color.trim()) {
-      filter.color = {
-        $regex: new RegExp(`^${color.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
-      };
-    }
-    if (maxPrice != null && String(maxPrice).trim() !== "") {
-      const mp = Number(maxPrice);
-      if (!Number.isNaN(mp)) {
-        filter.price = { $lte: mp };
+
+    const rawColors = colors || color;
+    if (rawColors) {
+      const colorList = (Array.isArray(rawColors) ? rawColors.join(",") : String(rawColors))
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (colorList.length > 0) {
+        filter.color = {
+          $in: colorList.map(
+            (c) => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
+          ),
+        };
       }
+    }
+
+    const minP = minPrice != null && String(minPrice).trim() !== "" ? Number(minPrice) : null;
+    const maxP = maxPrice != null && String(maxPrice).trim() !== "" ? Number(maxPrice) : null;
+    if (minP != null || maxP != null) {
+      const priceFilter: Record<string, number> = {};
+      if (minP != null && !Number.isNaN(minP)) priceFilter.$gte = minP;
+      if (maxP != null && !Number.isNaN(maxP)) priceFilter.$lte = maxP;
+      filter.price = priceFilter;
     }
 
     const p = Math.max(1, parseInt(String(page), 10) || 1);
@@ -119,13 +164,15 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     const [items, total] = await Promise.all([
       Product.find(filter)
         .select(
-          "_id name slug category subCategory images price salePrice stock tags featured trending masterpiece newArrival color createdAt sku"
+          "_id name slug category subCategory collections occasions images price salePrice stock tags featured trending masterpiece newArrival color createdAt sku"
         )
         .sort(sortSpec)
         .skip((p - 1) * l)
         .limit(l)
         .populate("category", "name slug")
         .populate("subCategory", "name slug")
+        .populate("collections", "name slug")
+        .populate("occasions", "name slug")
         .lean(),
       Product.countDocuments(filter),
     ]);
@@ -136,6 +183,187 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
       total,
       page: p,
       pages: Math.ceil(total / l) || 0,
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
+export async function getProductFacets(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { category, subCategory, section, featured, trending, masterpiece, q } = req.query;
+
+    const baseMatch: Record<string, unknown> = publishedFilter();
+
+    if (typeof category === "string" && category === "new") {
+      const since = new Date();
+      since.setDate(since.getDate() - 90);
+      baseMatch.$or = [{ newArrival: true }, { createdAt: { $gte: since } }];
+    } else if (typeof category === "string" && category && category !== "all") {
+      const cids = await resolveCategoryIdsIncludingDescendants(category);
+      if (cids.length === 0) {
+        res.json({
+          occasions: [],
+          collections: [],
+          colors: [],
+          priceRange: { min: 0, max: 0, total: 0 },
+          priceRanges: [],
+        });
+        return;
+      }
+      baseMatch.$or = [{ category: { $in: cids } }, { subCategory: { $in: cids } }];
+    }
+
+    if (typeof subCategory === "string" && subCategory && subCategory !== "all") {
+      const sid = await resolveCategoryIdBySlug(subCategory);
+      if (sid) baseMatch.subCategory = sid;
+    }
+
+    if (typeof section === "string" && section) {
+      baseMatch.sections = section;
+    }
+
+    if (featured === "true") baseMatch.featured = true;
+    if (trending === "true") baseMatch.trending = true;
+    if (masterpiece === "true") baseMatch.masterpiece = true;
+
+    if (typeof q === "string" && q.trim()) {
+      baseMatch.name = { $regex: q.trim(), $options: "i" };
+    }
+
+    const buildFacetPipeline = (matchCond: Record<string, unknown>): mongoose.PipelineStage[] => [
+      { $match: matchCond },
+      {
+        $facet: {
+          occasions: [
+            { $unwind: "$occasions" },
+            { $group: { _id: "$occasions", count: { $sum: 1 } } },
+          ],
+          collections: [
+            { $unwind: "$collections" },
+            { $group: { _id: "$collections", count: { $sum: 1 } } },
+          ],
+          colors: [
+            { $match: { color: { $exists: true, $ne: null } } },
+            {
+              $project: {
+                trimmedColor: { $trim: { input: "$color" } },
+              },
+            },
+            { $match: { trimmedColor: { $ne: "" } } },
+            { $group: { _id: "$trimmedColor", count: { $sum: 1 } } },
+            { $sort: { count: -1, _id: 1 } },
+          ],
+          priceStats: [
+            {
+              $group: {
+                _id: null,
+                minPrice: { $min: "$price" },
+                maxPrice: { $max: "$price" },
+                total: { $sum: 1 },
+              },
+            },
+          ],
+          priceBuckets: [
+            {
+              $bucket: {
+                groupBy: "$price",
+                boundaries: [0, 5000, 10000, 20000, 10000000],
+                default: "other",
+                output: { count: { $sum: 1 } },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    let [facetResult] = await Product.aggregate(buildFacetPipeline(baseMatch));
+    let effectiveMatch = baseMatch;
+
+    // If current category has 0 items, fallback to entire published catalog
+    if (!facetResult?.priceStats?.[0]?.total || facetResult.priceStats[0].total === 0) {
+      effectiveMatch = publishedFilter();
+      const [fallbackResult] = await Product.aggregate(buildFacetPipeline(effectiveMatch));
+      if (fallbackResult && fallbackResult.priceStats?.[0]?.total) {
+        facetResult = fallbackResult;
+      }
+    }
+
+    // Map occasion counts
+    const occMap = new Map<string, number>();
+    for (const item of facetResult?.occasions || []) {
+      occMap.set(String(item._id), item.count);
+    }
+    const allOccasions = await Occasion.find({ active: true }).sort({ order: 1, name: 1 }).lean();
+    const occasions = allOccasions.map((o) => ({
+      _id: String(o._id),
+      name: o.name,
+      slug: o.slug,
+      count: occMap.get(String(o._id)) || 0,
+    }));
+
+    // Map collection counts
+    const colMap = new Map<string, number>();
+    for (const item of facetResult?.collections || []) {
+      colMap.set(String(item._id), item.count);
+    }
+    const allCollections = await Collection.find({ active: true })
+      .sort({ order: 1, name: 1 })
+      .lean();
+    const collections = allCollections.map((c) => ({
+      _id: String(c._id),
+      name: c.name,
+      slug: c.slug,
+      count: colMap.get(String(c._id)) || 0,
+    }));
+
+    // Map colors (standard finishes Gold, Silver, Rose Gold, Antique)
+    const STANDARD_FINISHES = ["Gold", "Silver", "Rose Gold", "Antique"];
+    const finishCounts = await Promise.all(
+      STANDARD_FINISHES.map(async (f) => {
+        const cnt = await Product.countDocuments({
+          ...effectiveMatch,
+          $or: [
+            { color: { $regex: f, $options: "i" } },
+            { "specifications.color": { $regex: f, $options: "i" } },
+            { tags: { $regex: f, $options: "i" } },
+            { name: { $regex: f, $options: "i" } },
+          ],
+        });
+        return { name: f, count: cnt };
+      })
+    );
+
+    // Price stats & buckets
+    const pStats = facetResult?.priceStats?.[0] || { minPrice: 0, maxPrice: 0, total: 0 };
+    const bucketCounts: Record<string | number, number> = {};
+    for (const b of facetResult?.priceBuckets || []) {
+      bucketCounts[b._id] = b.count;
+    }
+
+    const priceRanges = [
+      { label: "Under ₹5,000", min: 0, max: 5000, count: bucketCounts[0] || 0 },
+      { label: "₹5,000 - ₹10,000", min: 5000, max: 10000, count: bucketCounts[5000] || 0 },
+      { label: "₹10,000 - ₹20,000", min: 10000, max: 20000, count: bucketCounts[10000] || 0 },
+      { label: "Over ₹20,000", min: 20000, max: 10000000, count: bucketCounts[20000] || 0 },
+    ];
+
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.json({
+      occasions,
+      collections,
+      colors: finishCounts,
+      priceRange: {
+        min: pStats.minPrice ?? 0,
+        max: pStats.maxPrice ?? 0,
+        total: pStats.total ?? 0,
+      },
+      priceRanges,
     });
   } catch (e) {
     next(e);

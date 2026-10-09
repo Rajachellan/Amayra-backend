@@ -45,9 +45,42 @@ export async function getCategoryTree(onlyActive = true): Promise<CategoryTreeNo
 
 export async function resolveCategoryIdBySlug(slug: string): Promise<Types.ObjectId | null> {
   const c = await Category.findOne({
-    slug,
+    slug: new RegExp(`^${slug.trim()}$`, "i"),
     active: true,
     status: { $in: ["published", null] },
   }).select("_id");
   return c?._id ?? null;
+}
+
+export async function resolveCategoryIdsIncludingDescendants(
+  slug: string
+): Promise<Types.ObjectId[]> {
+  const root = await Category.findOne({
+    slug: new RegExp(`^${slug.trim()}$`, "i"),
+    active: true,
+    status: { $in: ["published", null] },
+  }).select("_id");
+  if (!root) return [];
+
+  const all = await Category.find({
+    active: true,
+    status: { $in: ["published", null] },
+  })
+    .select("_id parentCategory")
+    .lean();
+
+  const result: Types.ObjectId[] = [root._id as Types.ObjectId];
+  const toCheck = [String(root._id)];
+
+  while (toCheck.length > 0) {
+    const currentId = toCheck.pop()!;
+    for (const c of all) {
+      if (c.parentCategory && String(c.parentCategory) === currentId) {
+        result.push(c._id as Types.ObjectId);
+        toCheck.push(String(c._id));
+      }
+    }
+  }
+
+  return result;
 }

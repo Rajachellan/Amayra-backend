@@ -521,6 +521,7 @@ router.delete(
   categoryController.deleteCategory
 );
 
+router.get("/products/facets", productController.getProductFacets);
 router.get("/products", productController.listProducts);
 router.get("/products/:slug", productController.getProductBySlug);
 router.post(
