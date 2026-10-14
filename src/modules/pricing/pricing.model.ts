@@ -24,6 +24,8 @@ const pricingSettingsSchema = new Schema(
     enableFreeGift: { type: Boolean, default: false },
     freeGiftThreshold: { type: Number, default: 6999 },
     freeGiftName: { type: String, default: "Free Gift (Worth ₹799)" },
+    freeShippingThreshold: { type: Number, default: 999 },
+    shippingFee: { type: Number, default: 199 },
   },
   { timestamps: true }
 );
@@ -49,6 +51,8 @@ export async function getOrCreatePricingSettings() {
       enableFreeGift: false,
       freeGiftThreshold: 6999,
       freeGiftName: "Free Gift (Worth ₹799)",
+      freeShippingThreshold: 999,
+      shippingFee: 199,
     });
   }
   return doc;

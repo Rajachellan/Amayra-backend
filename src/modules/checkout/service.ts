@@ -114,8 +114,11 @@ export async function buildOrderDraft(
     });
   }
 
-  // Shipping charges: Free above 1499, else 199
-  const shipping = pricing.subtotal > 0 && pricing.subtotal < 1499 ? 199 : 0;
+  // Shipping charges: dynamic from admin settings
+  const freeShippingThreshold = pricing.freeShippingThreshold ?? 999;
+  const shippingFee = pricing.shippingFee ?? 199;
+  const shipping =
+    pricing.subtotal > 0 && pricing.subtotal < freeShippingThreshold ? shippingFee : 0;
 
   // Free Gift (only if enabled in admin settings and threshold unlocked)
   if (pricing.freeGift?.enabled && pricing.freeGift?.unlocked) {

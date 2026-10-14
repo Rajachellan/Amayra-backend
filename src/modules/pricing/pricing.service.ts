@@ -52,6 +52,9 @@ export type PricingResult = {
     name: string;
     unlocked: boolean;
   };
+  freeShippingThreshold?: number;
+  shippingFee?: number;
+  shipping?: number;
   items: Array<{
     productId: string;
     name: string;
@@ -280,6 +283,9 @@ export async function calculateCartPricing(args: {
   const freeGiftEnabled = Boolean((settings as any).enableFreeGift);
   const freeGiftThreshold = Number((settings as any).freeGiftThreshold) || 6999;
   const freeGiftName = String((settings as any).freeGiftName || "Free Gift (Worth ₹799)");
+  const freeShippingThreshold = Number((settings as any).freeShippingThreshold) ?? 999;
+  const shippingFee = Number((settings as any).shippingFee) ?? 199;
+  const shipping = subtotal > 0 && subtotal < freeShippingThreshold ? shippingFee : 0;
 
   return {
     subtotal,
@@ -304,6 +310,9 @@ export async function calculateCartPricing(args: {
       name: freeGiftName,
       unlocked: freeGiftEnabled && subtotal >= freeGiftThreshold,
     },
+    freeShippingThreshold,
+    shippingFee,
+    shipping,
     items: resolvedItems,
   };
 }
