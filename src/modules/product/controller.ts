@@ -39,6 +39,62 @@ export async function createProduct(
   }
 }
 
+export const STANDARD_COLORS = [
+  "Red",
+  "Pink",
+  "Blue",
+  "Green",
+  "Grey",
+  "Orange",
+  "Purple/Voilet/Lavendar",
+  "Ivory/White",
+  "Golden",
+  "Black",
+  "Antique",
+  "Multicolour",
+] as const;
+
+export function getColorSearchRegexes(name: string): RegExp[] {
+  const lower = name.trim().toLowerCase();
+  if (lower === "golden") {
+    return [/^(gold|golden)$/i];
+  }
+  if (lower === "multicolour") {
+    return [/^(multicolour|multicolor|multi)$/i];
+  }
+  if (lower === "antique") {
+    return [/^(antique|antique gold)$/i];
+  }
+  if (lower === "ivory/white") {
+    return [/^(ivory\/white|ivory|white|pearl white|kundan \/ polki white)$/i];
+  }
+  if (lower === "purple/voilet/lavendar") {
+    return [/^(purple\/voilet\/lavendar|purple|violet|voilet|lavender|lavendar)$/i];
+  }
+  if (lower === "red") {
+    return [/^(red|ruby|ruby red)$/i];
+  }
+  if (lower === "green") {
+    return [/^(green|emerald|emerald green|mint green)$/i];
+  }
+  if (lower === "blue") {
+    return [/^(blue|sapphire|sapphire blue)$/i];
+  }
+  if (lower === "pink") {
+    return [/^(pink|peach|blush|rose gold)$/i];
+  }
+  if (lower === "grey") {
+    return [/^(grey|gray|silver|oxidised silver)$/i];
+  }
+  if (lower === "black") {
+    return [/^(black|black \/ metallic|metallic|oxidised)$/i];
+  }
+  if (lower === "orange") {
+    return [/^(orange)$/i];
+  }
+  return [new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")];
+}
+
 export async function listProducts(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const {
@@ -136,11 +192,19 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
         .map((s) => s.trim())
         .filter(Boolean);
       if (colorList.length > 0) {
-        filter.color = {
-          $in: colorList.map(
-            (c) => new RegExp(`^${c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")
-          ),
+        const regexes = colorList.flatMap((c) => getColorSearchRegexes(c));
+        const colorMatch = {
+          $or: [
+            { color: { $in: regexes } },
+            { "specifications.color": { $in: regexes } },
+            { tags: { $in: regexes } },
+          ],
         };
+        if (filter.$or) {
+          filter.$and = [...((filter.$and as any[]) || []), colorMatch];
+        } else {
+          filter.$or = colorMatch.$or;
+        }
       }
     }
 
@@ -322,20 +386,19 @@ export async function getProductFacets(
       count: colMap.get(String(c._id)) || 0,
     }));
 
-    // Map colors (standard finishes Gold, Silver, Rose Gold, Antique)
-    const STANDARD_FINISHES = ["Gold", "Silver", "Rose Gold", "Antique"];
+    // Map colors to the 12 standard colours requested
     const finishCounts = await Promise.all(
-      STANDARD_FINISHES.map(async (f) => {
+      STANDARD_COLORS.map(async (clr) => {
+        const regexes = getColorSearchRegexes(clr);
         const cnt = await Product.countDocuments({
           ...effectiveMatch,
           $or: [
-            { color: { $regex: f, $options: "i" } },
-            { "specifications.color": { $regex: f, $options: "i" } },
-            { tags: { $regex: f, $options: "i" } },
-            { name: { $regex: f, $options: "i" } },
+            { color: { $in: regexes } },
+            { "specifications.color": { $in: regexes } },
+            { tags: { $in: regexes } },
           ],
         });
-        return { name: f, count: cnt };
+        return { name: clr, count: cnt };
       })
     );
 
