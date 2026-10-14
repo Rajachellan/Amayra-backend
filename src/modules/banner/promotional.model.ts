@@ -39,6 +39,7 @@ const promotionalBannerSchema = new Schema(
     active: { type: Boolean, default: true, index: true },
     startDate: { type: Date },
     endDate: { type: Date },
+    showOverlay: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

@@ -40,6 +40,29 @@ export async function getPricingSettingsAdmin(
   }
 }
 
+export async function getPublicPricingSettings(
+  _req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const settings = await getOrCreatePricingSettings();
+    res.json({
+      discountSlabs: (settings.discountSlabs || []).map((s) => ({
+        minimumCartValue: s.minimumCartValue,
+        discountPercentage: s.discountPercentage,
+      })),
+      allowCouponWithSlabDiscount: settings.allowCouponWithSlabDiscount,
+      defaultGstRate: settings.defaultGstRate,
+      enableFreeGift: Boolean((settings as any).enableFreeGift),
+      freeGiftThreshold: Number((settings as any).freeGiftThreshold) || 6999,
+      freeGiftName: String((settings as any).freeGiftName || "Free Gift (Worth ₹799)"),
+    });
+  } catch (e) {
+    next(e);
+  }
+}
+
 export async function updatePricingSettingsAdmin(
   req: Request,
   res: Response,

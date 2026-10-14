@@ -31,6 +31,10 @@ export type PricingResult = {
     minimumCartValue: number;
     discountPercentage: number;
   };
+  discountSlabs?: Array<{
+    minimumCartValue: number;
+    discountPercentage: number;
+  }>;
   upsell: {
     available: boolean;
     nextThreshold?: number;
@@ -289,6 +293,10 @@ export async function calculateCartPricing(args: {
     currency: "INR",
     appliedCoupon,
     discountSlab: activeSlab,
+    discountSlabs: slabs.map((s) => ({
+      minimumCartValue: s.minimumCartValue,
+      discountPercentage: s.discountPercentage,
+    })),
     upsell,
     freeGift: {
       enabled: freeGiftEnabled,

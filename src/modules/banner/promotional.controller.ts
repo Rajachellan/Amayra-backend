@@ -28,6 +28,7 @@ function normalizeBody(body: Record<string, unknown>) {
   if (body.endDate === "" || body.endDate === null) out.endDate = null;
   if (body.order !== undefined) out.order = Number(body.order) || 0;
   if (body.priority !== undefined) out.priority = Number(body.priority) || 0;
+  if (body.showOverlay !== undefined) out.showOverlay = Boolean(body.showOverlay);
   return out;
 }
 
@@ -72,6 +73,7 @@ async function toPublicCard(doc: Record<string, unknown>) {
     priority: (doc.priority as number) ?? 0,
     link: buttonUrl || link,
     order: (doc.order as number) ?? 0,
+    showOverlay: Boolean(doc.showOverlay),
   };
 }
 

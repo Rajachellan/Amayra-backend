@@ -420,6 +420,7 @@ router.put(
 router.get("/admin/audit-logs", authenticateAdmin, auditController.getAuditLogsAdmin);
 
 // --- PRICING ENGINE & SLABS ---
+router.get("/pricing-settings", pricingController.getPublicPricingSettings);
 router.post("/cart/calculate", pricingController.calculateCart);
 router.post("/cart/validate-batch", productController.validateCartBatch);
 router.post("/cart/validate", productController.validateCartBatch);
