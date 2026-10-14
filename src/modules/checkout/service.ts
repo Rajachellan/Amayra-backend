@@ -114,11 +114,21 @@ export async function buildOrderDraft(
     });
   }
 
-  // Shipping charges: dynamic from admin settings
-  const freeShippingThreshold = pricing.freeShippingThreshold ?? 999;
-  const shippingFee = pricing.shippingFee ?? 199;
+  // Shipping charges: dynamic from admin settings via pricing engine
+  const freeShippingThreshold =
+    pricing.freeShippingThreshold != null && !isNaN(Number(pricing.freeShippingThreshold))
+      ? Number(pricing.freeShippingThreshold)
+      : 999;
+  const shippingFee =
+    pricing.shippingFee != null && !isNaN(Number(pricing.shippingFee))
+      ? Number(pricing.shippingFee)
+      : 199;
   const shipping =
-    pricing.subtotal > 0 && pricing.subtotal < freeShippingThreshold ? shippingFee : 0;
+    typeof pricing.shipping === "number" && !isNaN(pricing.shipping)
+      ? pricing.shipping
+      : pricing.subtotal > 0 && pricing.subtotal < freeShippingThreshold
+        ? shippingFee
+        : 0;
 
   // Free Gift (only if enabled in admin settings and threshold unlocked)
   if (pricing.freeGift?.enabled && pricing.freeGift?.unlocked) {

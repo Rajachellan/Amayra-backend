@@ -283,8 +283,15 @@ export async function calculateCartPricing(args: {
   const freeGiftEnabled = Boolean((settings as any).enableFreeGift);
   const freeGiftThreshold = Number((settings as any).freeGiftThreshold) || 6999;
   const freeGiftName = String((settings as any).freeGiftName || "Free Gift (Worth ₹799)");
-  const freeShippingThreshold = Number((settings as any).freeShippingThreshold) ?? 999;
-  const shippingFee = Number((settings as any).shippingFee) ?? 199;
+  const freeShippingThreshold =
+    (settings as any).freeShippingThreshold != null &&
+    !isNaN(Number((settings as any).freeShippingThreshold))
+      ? Number((settings as any).freeShippingThreshold)
+      : 999;
+  const shippingFee =
+    (settings as any).shippingFee != null && !isNaN(Number((settings as any).shippingFee))
+      ? Number((settings as any).shippingFee)
+      : 199;
   const shipping = subtotal > 0 && subtotal < freeShippingThreshold ? shippingFee : 0;
 
   return {

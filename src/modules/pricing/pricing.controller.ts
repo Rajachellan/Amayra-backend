@@ -34,7 +34,19 @@ export async function getPricingSettingsAdmin(
 ): Promise<void> {
   try {
     const settings = await getOrCreatePricingSettings();
-    res.json(settings);
+    const obj = settings.toObject();
+    res.json({
+      ...obj,
+      freeShippingThreshold:
+        (settings as any).freeShippingThreshold != null &&
+        !isNaN(Number((settings as any).freeShippingThreshold))
+          ? Number((settings as any).freeShippingThreshold)
+          : 999,
+      shippingFee:
+        (settings as any).shippingFee != null && !isNaN(Number((settings as any).shippingFee))
+          ? Number((settings as any).shippingFee)
+          : 199,
+    });
   } catch (e) {
     next(e);
   }
@@ -57,8 +69,15 @@ export async function getPublicPricingSettings(
       enableFreeGift: Boolean((settings as any).enableFreeGift),
       freeGiftThreshold: Number((settings as any).freeGiftThreshold) || 6999,
       freeGiftName: String((settings as any).freeGiftName || "Free Gift (Worth ₹799)"),
-      freeShippingThreshold: Number((settings as any).freeShippingThreshold) ?? 999,
-      shippingFee: Number((settings as any).shippingFee) ?? 199,
+      freeShippingThreshold:
+        (settings as any).freeShippingThreshold != null &&
+        !isNaN(Number((settings as any).freeShippingThreshold))
+          ? Number((settings as any).freeShippingThreshold)
+          : 999,
+      shippingFee:
+        (settings as any).shippingFee != null && !isNaN(Number((settings as any).shippingFee))
+          ? Number((settings as any).shippingFee)
+          : 199,
     });
   } catch (e) {
     next(e);
