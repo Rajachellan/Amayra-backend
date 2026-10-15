@@ -40,57 +40,78 @@ export async function createProduct(
 }
 
 export const STANDARD_COLORS = [
-  "Red",
-  "Pink",
-  "Blue",
-  "Green",
-  "Grey",
-  "Orange",
-  "Purple/Voilet/Lavendar",
-  "Ivory/White",
-  "Golden",
+  "Antique/Metallic",
   "Black",
-  "Antique",
+  "Blue/ Teal",
+  "Golden/Yellow",
+  "Green/Mint",
+  "Grey/Smokey",
+  "Ivory/White",
   "Multicolour",
+  "Orange/Peach",
+  "Pink/Magenta",
+  "Purple/Voilet/Lavendar",
+  "Red/ Maroon",
 ] as const;
 
 export function getColorSearchRegexes(name: string): RegExp[] {
   const lower = name.trim().toLowerCase();
-  if (lower === "golden") {
-    return [/^(gold|golden)$/i];
-  }
-  if (lower === "multicolour") {
-    return [/^(multicolour|multicolor|multi)$/i];
-  }
-  if (lower === "antique") {
-    return [/^(antique|antique gold)$/i];
-  }
-  if (lower === "ivory/white") {
-    return [/^(ivory\/white|ivory|white|pearl white|kundan \/ polki white)$/i];
-  }
-  if (lower === "purple/voilet/lavendar") {
-    return [/^(purple\/voilet\/lavendar|purple|violet|voilet|lavender|lavendar)$/i];
-  }
-  if (lower === "red") {
-    return [/^(red|ruby|ruby red)$/i];
-  }
-  if (lower === "green") {
-    return [/^(green|emerald|emerald green|mint green)$/i];
-  }
-  if (lower === "blue") {
-    return [/^(blue|sapphire|sapphire blue)$/i];
-  }
-  if (lower === "pink") {
-    return [/^(pink|peach|blush|rose gold)$/i];
-  }
-  if (lower === "grey") {
-    return [/^(grey|gray|silver|oxidised silver)$/i];
+  if (lower === "antique/metallic" || lower === "antique" || lower === "metallic") {
+    return [/^(antique\/metallic|antique \/ metallic|antique|metallic|antique gold)$/i];
   }
   if (lower === "black") {
-    return [/^(black|black \/ metallic|metallic|oxidised)$/i];
+    return [/^(black|black \/ metallic|jet black|oxidised)$/i];
   }
-  if (lower === "orange") {
-    return [/^(orange)$/i];
+  if (lower === "blue/ teal" || lower === "blue/teal" || lower === "blue" || lower === "teal") {
+    return [/^(blue\/ teal|blue\/teal|blue \/ teal|blue|teal|sapphire|sapphire blue|turquoise)$/i];
+  }
+  if (lower === "golden/yellow" || lower === "golden" || lower === "gold" || lower === "yellow") {
+    return [/^(golden\/yellow|golden\/ yellow|golden \/ yellow|gold\/yellow|gold|golden|yellow)$/i];
+  }
+  if (lower === "green/mint" || lower === "green" || lower === "mint") {
+    return [
+      /^(green\/mint|green\/ mint|green \/ mint|green|mint|emerald|emerald green|mint green)$/i,
+    ];
+  }
+  if (
+    lower === "grey/smokey" ||
+    lower === "grey" ||
+    lower === "gray" ||
+    lower === "smokey" ||
+    lower === "smoky"
+  ) {
+    return [
+      /^(grey\/smokey|grey\/ smokey|grey \/ smokey|grey|gray|silver|oxidised silver|smokey|smoky)$/i,
+    ];
+  }
+  if (lower === "ivory/white" || lower === "ivory" || lower === "white") {
+    return [
+      /^(ivory\/white|ivory \/ white|ivory|white|pearl white|pearl|kundan \/ polki white|off white)$/i,
+    ];
+  }
+  if (lower === "multicolour" || lower === "multicolor" || lower === "multi") {
+    return [/^(multicolour|multicolor|multi|multi-colour|multi-color|navratan)$/i];
+  }
+  if (lower === "orange/peach" || lower === "orange" || lower === "peach") {
+    return [/^(orange\/peach|orange\/ peach|orange \/ peach|orange|peach|coral|rust)$/i];
+  }
+  if (lower === "pink/magenta" || lower === "pink" || lower === "magenta") {
+    return [
+      /^(pink\/magenta|pink\/ magenta|pink \/ magenta|pink|magenta|blush|rose gold|rose|rani pink)$/i,
+    ];
+  }
+  if (
+    lower === "purple/voilet/lavendar" ||
+    lower === "purple" ||
+    lower === "violet" ||
+    lower === "lavender"
+  ) {
+    return [
+      /^(purple\/voilet\/lavendar|purple \/ voilet \/ lavendar|purple|violet|voilet|lavender|lavendar|lilac|mauve)$/i,
+    ];
+  }
+  if (lower === "red/ maroon" || lower === "red/maroon" || lower === "red" || lower === "maroon") {
+    return [/^(red\/ maroon|red\/maroon|red \/ maroon|red|maroon|ruby|ruby red|wine)$/i];
   }
   return [new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i")];
 }

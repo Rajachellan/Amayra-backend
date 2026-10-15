@@ -35,8 +35,8 @@ const DEFAULT_SEED_REVIEWS = [
     title: "Stunning piece for bridal and wedding wear",
     comment:
       "Superb quality Kundan stones and beads. Got so many compliments during the family reception!",
-    reviewerName: "Krishan agrawal",
-    reviewerEmail: "krishan.agrawal@example.com",
+    reviewerName: "Kritika Agrawal",
+    reviewerEmail: "kritika.agrawal@example.com",
     isAnonymous: false,
     verified: true,
     createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
