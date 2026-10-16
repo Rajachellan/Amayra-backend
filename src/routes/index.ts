@@ -735,6 +735,9 @@ router.post(
   requirePermission("catalog:write"),
   async (_req, res, next) => {
     try {
+      if (process.env.NODE_ENV === "production") {
+        throw new AppError(403, "Catalog wipe endpoint is strictly disabled in production.");
+      }
       await wipeCatalogKeepAdmin();
       res.json({ success: true, message: "Demo catalog data wiped successfully." });
     } catch (e) {

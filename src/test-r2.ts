@@ -1,14 +1,23 @@
+import "dotenv/config";
 import { S3Client, ListBucketsCommand } from "@aws-sdk/client-s3";
 
 async function test() {
   console.log("Testing R2 connection...");
-  const accountId = "0339b10e8a1c4aa8bf7d1af7c4446dff";
+  const accountId = process.env.R2_ACCOUNT_ID || "7bc4918169a8d49565bd9774e68af836";
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+
+  if (!accessKeyId || !secretAccessKey) {
+    console.error("Missing R2 credentials in environment variables");
+    return;
+  }
+
   const client = new S3Client({
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: "f04d61c3f64de4166f05bdfcab809d87",
-      secretAccessKey: "fd4417ab51d4ab8708d7fd4d4b89044f4b0dc56aa355419ca822948e345b80b4",
+      accessKeyId,
+      secretAccessKey,
     },
     forcePathStyle: true,
   });

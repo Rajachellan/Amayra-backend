@@ -138,8 +138,12 @@ import { logger } from "../../config/logger.js";
 export async function postShiprocketWebhook(req: Request, res: Response): Promise<void> {
   let eventId = "";
   try {
-    const token = process.env.SHIPROCKET_WEBHOOK_TOKEN;
-    const headerToken = req.headers["x-api-key"] || req.headers["authorization"];
+    const token = process.env.SHIPROCKET_WEBHOOK_TOKEN?.trim();
+    let headerToken = (req.headers["x-api-key"] || req.headers["authorization"]) as
+      string | undefined;
+    if (typeof headerToken === "string") {
+      headerToken = headerToken.replace(/^Bearer\s+/i, "").trim();
+    }
     if (token && headerToken !== token) {
       res.status(401).send("Unauthorized Webhook Token");
       return;

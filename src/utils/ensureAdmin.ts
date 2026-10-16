@@ -11,10 +11,14 @@ export async function ensureAdminFromEnv(): Promise<void> {
   const existing = await Admin.findOne({ email });
   if (existing) {
     let updated = false;
-    const matches = await verifyPassword(password, existing.passwordHash);
-    if (!matches) {
-      existing.passwordHash = await hashPassword(password);
-      updated = true;
+    const forceReset = process.env.ADMIN_PASSWORD_FORCE_RESET === "true";
+    if (forceReset && password !== "changeme") {
+      const matches = await verifyPassword(password, existing.passwordHash);
+      if (!matches) {
+        existing.passwordHash = await hashPassword(password);
+        updated = true;
+        logger.warn("Admin password forcefully updated from ADMIN_PASSWORD environment variable");
+      }
     }
     if (existing.role !== "super_admin") {
       existing.role = "super_admin" as any;
