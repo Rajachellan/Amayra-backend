@@ -13,8 +13,8 @@ import { resolveOccasionIdBySlug } from "../../services/occasionService.js";
 import { Occasion } from "../../models/Occasion.js";
 
 function publishedFilter(extra: Record<string, unknown> = {}) {
-  // stock: { $gt: 0 } hides out-of-stock products from all public storefront queries
-  return { status: { $in: ["published", null] }, stock: { $gt: 0 }, ...extra };
+  // Allow all published products (including stock = 0) so the storefront can display them as "Sold Out"
+  return { status: { $in: ["published", null] }, ...extra };
 }
 
 export async function createProduct(
