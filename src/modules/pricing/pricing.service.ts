@@ -118,6 +118,9 @@ export async function calculateCartPricing(args: {
     if (!p) {
       throw new AppError(400, `Product not found: ${key}`);
     }
+    if (p.isPromotionalGift === true || p.sku === "GIFT799" || p.slug === "free-gift-worth-799") {
+      throw new AppError(400, `Promotional gift "${p.name}" cannot be purchased directly.`);
+    }
 
     const rawUnitPrice = p.salePrice != null && p.salePrice >= 0 ? p.salePrice : p.price;
     if (!(rawUnitPrice >= 0)) {

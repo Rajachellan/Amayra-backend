@@ -13,8 +13,15 @@ import { resolveOccasionIdBySlug } from "../../services/occasionService.js";
 import { Occasion } from "../../models/Occasion.js";
 
 function publishedFilter(extra: Record<string, unknown> = {}) {
-  // Allow all published products (including stock = 0) so the storefront can display them as "Sold Out"
-  return { status: { $in: ["published", null] }, ...extra };
+  // Allow all published products (including stock = 0 so sold-out items can be displayed as Sold Out),
+  // but strictly exclude promotional gifts (which are only complimentary order bonuses, not standalone selling catalog items).
+  return {
+    status: { $in: ["published", null] },
+    isPromotionalGift: { $ne: true },
+    sku: { $ne: "GIFT799" },
+    slug: { $ne: "free-gift-worth-799" },
+    ...extra,
+  };
 }
 
 export async function createProduct(
@@ -473,22 +480,26 @@ export async function validateCartBatch(
     const docs = await Product.find({
       $or: [{ slug: { $in: slugs } }, { _id: { $in: ids } }],
     })
-      .select("_id slug name price salePrice stock status")
+      .select("_id slug name price salePrice stock status isPromotionalGift sku")
       .lean();
 
     const result = items.map((item) => {
       const match = docs.find((d) => d.slug === item.slug || String(d._id) === item.id);
       if (!match) return { id: item.id, slug: item.slug, stock: 0, price: 0, valid: false };
+      const isPromoGift =
+        match.isPromotionalGift === true ||
+        match.sku === "GIFT799" ||
+        match.slug === "free-gift-worth-799";
       const effectivePrice = Math.round(
         match.salePrice != null && match.salePrice < match.price ? match.salePrice : match.price
       );
       return {
         id: String(match._id),
         slug: match.slug,
-        stock: match.stock ?? 0,
+        stock: isPromoGift ? 0 : (match.stock ?? 0),
         price: effectivePrice,
         status: match.status,
-        valid: match.status === "published" && (match.stock ?? 0) > 0,
+        valid: match.status === "published" && !isPromoGift && (match.stock ?? 0) > 0,
       };
     });
 
