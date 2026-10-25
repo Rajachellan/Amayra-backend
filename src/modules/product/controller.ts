@@ -141,6 +141,7 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
       colors,
       minPrice,
       maxPrice,
+      inStock,
       page = "1",
       limit = "24",
       sort,
@@ -245,6 +246,28 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
       filter.price = priceFilter;
     }
 
+    if (inStock === "true" || inStock === "1") {
+      const stockMatch = {
+        $or: [{ stock: { $gt: 0 } }, { "variants.stock": { $gt: 0 } }, { inventoryTracked: false }],
+      };
+      if (filter.$or) {
+        filter.$and = [...((filter.$and as any[]) || []), stockMatch];
+      } else {
+        filter.$or = stockMatch.$or;
+      }
+    } else if (inStock === "false" || inStock === "0") {
+      const outOfStockMatch = {
+        inventoryTracked: { $ne: false },
+        stock: { $lte: 0 },
+        $nor: [{ "variants.stock": { $gt: 0 } }],
+      };
+      if (filter.$or) {
+        filter.$and = [...((filter.$and as any[]) || []), outOfStockMatch];
+      } else {
+        filter.$or = outOfStockMatch.$nor ? { $nor: outOfStockMatch.$nor } : undefined;
+      }
+    }
+
     const p = Math.max(1, parseInt(String(page), 10) || 1);
     const l = Math.min(100, Math.max(1, parseInt(String(limit), 10) || 24));
     let sortSpec: Record<string, 1 | -1> = { createdAt: -1 };
@@ -256,7 +279,7 @@ export async function listProducts(req: Request, res: Response, next: NextFuncti
     const [items, total] = await Promise.all([
       Product.find(filter)
         .select(
-          "_id name slug category subCategory collections occasions images price salePrice stock tags featured trending masterpiece newArrival color createdAt sku"
+          "_id name slug category subCategory collections occasions images price salePrice stock reservedStock inventoryTracked variants tags featured trending masterpiece newArrival color createdAt sku"
         )
         .sort(sortSpec)
         .skip((p - 1) * l)
@@ -287,7 +310,8 @@ export async function getProductFacets(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { category, subCategory, section, featured, trending, masterpiece, q } = req.query;
+    const { category, subCategory, section, featured, trending, masterpiece, q, inStock } =
+      req.query;
 
     const baseMatch: Record<string, unknown> = publishedFilter();
 
@@ -325,6 +349,28 @@ export async function getProductFacets(
 
     if (typeof q === "string" && q.trim()) {
       baseMatch.name = { $regex: q.trim(), $options: "i" };
+    }
+
+    if (inStock === "true" || inStock === "1") {
+      const stockMatch = {
+        $or: [{ stock: { $gt: 0 } }, { "variants.stock": { $gt: 0 } }, { inventoryTracked: false }],
+      };
+      if (baseMatch.$or) {
+        baseMatch.$and = [...((baseMatch.$and as any[]) || []), stockMatch];
+      } else {
+        baseMatch.$or = stockMatch.$or;
+      }
+    } else if (inStock === "false" || inStock === "0") {
+      const outOfStockMatch = {
+        inventoryTracked: { $ne: false },
+        stock: { $lte: 0 },
+        $nor: [{ "variants.stock": { $gt: 0 } }],
+      };
+      if (baseMatch.$or) {
+        baseMatch.$and = [...((baseMatch.$and as any[]) || []), outOfStockMatch];
+      } else {
+        baseMatch.$or = outOfStockMatch.$nor ? { $nor: outOfStockMatch.$nor } : undefined;
+      }
     }
 
     const buildFacetPipeline = (matchCond: Record<string, unknown>): mongoose.PipelineStage[] => [

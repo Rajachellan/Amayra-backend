@@ -113,7 +113,10 @@ export function createApp() {
     express.static(path.join(process.cwd(), "uploads"), {
       dotfiles: "deny",
       index: false,
-      maxAge: isProduction ? "1d" : 0,
+      maxAge: isProduction ? "30d" : "7d",
+      setHeaders: (res) => {
+        res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+      },
     })
   );
 
