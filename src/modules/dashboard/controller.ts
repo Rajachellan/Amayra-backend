@@ -37,7 +37,7 @@ export async function getDashboardStats(
       Order.find(orderListVisibilityFilter())
         .sort({ createdAt: -1 })
         .limit(5)
-        .populate("customer", "name email"),
+        .populate("customer", "name email phone"),
       Payment.find({ status: "captured" })
         .sort({ createdAt: -1 })
         .limit(5)

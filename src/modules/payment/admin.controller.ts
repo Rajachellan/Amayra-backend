@@ -25,7 +25,7 @@ export async function listPaymentsAdmin(
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("customer", "name email")
+        .populate("customer", "name email phone")
         .populate("order", "orderNumber status total")
         .lean(),
       Payment.countDocuments(filter),
