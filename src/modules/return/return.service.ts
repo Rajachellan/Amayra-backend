@@ -9,6 +9,7 @@ import { ReturnStatusHistory } from "./history.model.js";
 import { transitionReturnStatus } from "./statemachine.service.js";
 import { calculateOrderItemsEligibility } from "./eligibility.service.js";
 import { StoreCredit } from "../credit/model.js";
+import { issueCreditNoteForReturn } from "../credit/credit.service.js";
 import { ExchangeVoucher } from "../voucher/model.js";
 import * as shiprocketClient from "../../integrations/shiprocket/service.js";
 import { restockReturnedItems, recordDamagedReturn } from "../inventory/inventory.service.js";
@@ -717,72 +718,23 @@ export const inspectReturn = (returnId: string, args: any, adminId: string) =>
   qcInspectReturn(returnId, args, adminId);
 
 /**
- * Issue Store Credit to Customer with partial balance tracking.
+ * Issue Store Credit / Credit Note to Customer with 90-day validity.
  */
 export async function issueStoreCredit(
   returnId: string,
   args: { expiryDays?: number },
   adminId: string
 ): Promise<any> {
-  const returnDoc = await Return.findById(returnId);
-  if (!returnDoc) throw new AppError(404, "Return request not found");
-
-  if (returnDoc.status !== "QC_APPROVED" && returnDoc.status !== "SETTLEMENT_PROCESSING") {
-    throw new AppError(400, `Store credit cannot be issued in current status: ${returnDoc.status}`);
-  }
-
-  const order = await Order.findById(returnDoc.orderId);
-  if (!order) throw new AppError(404, "Associated order not found");
-
-  const amount = returnDoc.settlementDetails?.settlementAmount || 0;
-  if (amount <= 0) throw new AppError(400, "Settlement amount must be greater than 0");
-
-  const creditCode = await generateCreditCode("SC");
-  const expiryDays = args.expiryDays || 365;
-  const expiryDate = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
-
-  const storeCredit = await StoreCredit.create({
-    creditCode,
-    customerId: returnDoc.customerId,
-    originalOrderId: returnDoc.orderId,
-    returnRequestId: returnDoc._id,
-    originalAmount: amount,
-    remainingBalance: amount,
-    expiryDate,
-    status: "ACTIVE",
+  const result = await issueCreditNoteForReturn({
+    returnId,
+    adminId,
   });
 
-  returnDoc.settlementDetails = {
-    settlementType: "STORE_CREDIT",
-    storeCreditId: storeCredit._id as any,
-    settlementAmount: amount,
-    refundMethod: order.paymentMethod === "COD" ? "BANK" : "RAZORPAY",
-    processedAt: new Date(),
+  return {
+    returnDoc: await Return.findById(returnId),
+    storeCredit: result.storeCredit,
+    creditNote: result.creditNote,
   };
-
-  await returnDoc.save();
-
-  await transitionReturnStatus({
-    returnId: returnDoc._id,
-    targetStatus: "REFUND_ISSUED",
-    changedBy: adminId,
-    changedByRole: "ADMIN",
-    notes: `Issued Store Credit ${creditCode} of ₹${amount}`,
-  });
-
-  await transitionReturnStatus({
-    returnId: returnDoc._id,
-    targetStatus: "COMPLETED",
-    changedBy: adminId,
-    changedByRole: "ADMIN",
-    notes: "Return process completed successfully via Store Credit",
-  });
-
-  order.returnStatus = "COMPLETED";
-  order.refundStatus = "COMPLETED";
-  await order.save();
-
-  return { returnDoc: await Return.findById(returnDoc._id), storeCredit };
 }
 
 // Backward-compatible alias for refundReturn

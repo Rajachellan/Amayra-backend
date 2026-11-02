@@ -72,6 +72,12 @@ export async function processPrepaidPaymentCapture(args: {
     }
     await order.save({ session });
 
+    // Commit any reserved store credit within the same transaction
+    if (order.storeCreditsUsed && (order.storeCreditsUsed as any[]).length > 0) {
+      const { commitStoreCreditReservations } = await import("../credit/credit.service.js");
+      await commitStoreCreditReservations({ orderId: order._id, session });
+    }
+
     await session.commitTransaction();
     session.endSession();
 
@@ -143,4 +149,13 @@ export async function processPaymentFailure(
   // Release any active inventory reservations
   const { releaseInventoryReservations } = await import("../inventory/inventory.service.js");
   await releaseInventoryReservations(order._id, reason || "PAYMENT_FAILED", "RAZORPAY");
+
+  // Release any active store credit reservations
+  if (order.storeCreditsUsed && (order.storeCreditsUsed as any[]).length > 0) {
+    const { releaseStoreCreditReservations } = await import("../credit/credit.service.js");
+    await releaseStoreCreditReservations({
+      orderId: order._id,
+      reason: reason || "PAYMENT_FAILED",
+    });
+  }
 }

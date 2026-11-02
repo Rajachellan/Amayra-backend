@@ -122,7 +122,7 @@ export const ORDER_STATUSES = [
 
 const paymentInfoSchema = new Schema(
   {
-    provider: { type: String, enum: ["RAZORPAY", "COD"], default: "RAZORPAY" },
+    provider: { type: String, enum: ["RAZORPAY", "COD", "STORE_CREDIT"], default: "RAZORPAY" },
     razorpayOrderId: { type: String },
     razorpayPaymentId: { type: String },
     status: { type: String, enum: PAYMENT_STATUS_VALUES, default: "PENDING" },
@@ -194,6 +194,19 @@ const orderSchema = new Schema(
     total: { type: Number, required: true },
     currency: { type: String, default: "INR" },
 
+    storeCreditAmount: { type: Number, default: 0, min: 0 },
+    storeCreditsUsed: {
+      type: [
+        {
+          storeCreditId: { type: Schema.Types.ObjectId, ref: "StoreCredit" },
+          creditNoteId: { type: Schema.Types.ObjectId, ref: "CreditNote" },
+          code: { type: String },
+          amount: { type: Number },
+        },
+      ],
+      default: [],
+    },
+
     // Domain Specific statuses
     orderStatus: {
       type: String,
@@ -228,7 +241,7 @@ const orderSchema = new Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["online", "cod", "PREPAID", "COD"],
+      enum: ["online", "cod", "PREPAID", "COD", "STORE_CREDIT"],
       default: "PREPAID",
       index: true,
     },
@@ -285,6 +298,8 @@ orderSchema.pre("save", function (next) {
   } else if (this.paymentMethod === "cod" || this.paymentMethod === "COD") {
     this.paymentMethod = "COD";
     this.paymentInfo.provider = "COD";
+  } else if (this.paymentMethod === "STORE_CREDIT") {
+    this.paymentInfo.provider = "STORE_CREDIT";
   }
 
   // Sync Shipping Subdocuments

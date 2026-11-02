@@ -55,6 +55,7 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
       shippingAddress?: ShippingAddressInput;
       couponCode?: string;
       paymentMethod?: string;
+      storeCreditCodes?: string[];
     };
     if (!body.items?.length || !body.shippingAddress)
       throw new AppError(400, "items and shippingAddress required");
@@ -68,29 +69,84 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
       body.couponCode
     );
 
+    // Reserve Store Credit if provided
+    const targetOrderId = new mongoose.Types.ObjectId();
+    let storeCreditAmount = 0;
+    let storeCreditsUsed: Array<{
+      storeCreditId: mongoose.Types.ObjectId;
+      creditNoteId: mongoose.Types.ObjectId;
+      code: string;
+      amount: number;
+    }> = [];
+
+    if (body.storeCreditCodes && body.storeCreditCodes.length > 0) {
+      const { reserveStoreCredits } = await import("../credit/credit.service.js");
+      const reservationRes = await reserveStoreCredits({
+        customerId: cid,
+        orderId: targetOrderId,
+        creditCodes: body.storeCreditCodes,
+        requiredAmount: draft.total,
+      });
+      storeCreditAmount = reservationRes.totalReserved;
+      storeCreditsUsed = reservationRes.reservations;
+    }
+
+    const payableAmount = Math.max(0, draft.total - storeCreditAmount);
+
+    // Flow 1: 100% covered by Store Credit
+    if (payableAmount === 0 && storeCreditAmount > 0) {
+      const { createStoreCreditOrderFromDraft } = await import("../../services/checkoutService.js");
+      const order = await createStoreCreditOrderFromDraft({
+        customerId: cid,
+        draft,
+        shippingAddress: body.shippingAddress as ShippingAddressInput,
+        orderId: targetOrderId,
+        storeCreditAmount,
+        storeCreditsUsed,
+      });
+
+      res.status(201).json({
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        paymentMethod: "STORE_CREDIT",
+        amount: 0,
+        payableAmount: 0,
+        storeCreditAmount,
+        currency: "INR",
+        displayTotal: draft.total,
+      });
+      return;
+    }
+
     const isCod = body.paymentMethod === "cod" || body.paymentMethod === "COD";
 
+    // Flow 2: COD with or without partial Store Credit
     if (isCod) {
       const { createCodOrderFromDraft } = await import("../../services/checkoutService.js");
       const order = await createCodOrderFromDraft({
         customerId: cid,
         draft,
         shippingAddress: body.shippingAddress as ShippingAddressInput,
+        orderId: targetOrderId,
+        storeCreditAmount,
+        storeCreditsUsed,
       });
 
       res.status(201).json({
         orderId: order._id,
         orderNumber: order.orderNumber,
         paymentMethod: "COD",
-        amount: order.total,
+        amount: payableAmount,
+        payableAmount,
+        storeCreditAmount,
         currency: "INR",
-        displayTotal: order.total,
+        displayTotal: draft.total,
       });
       return;
     }
 
-    // Prepaid Razorpay Flow
-    const amountPaise = Math.round(draft.total * 100);
+    // Flow 3: Prepaid Razorpay Flow with or without partial Store Credit
+    const amountPaise = Math.round(payableAmount * 100);
 
     let rzOrder: { id: string };
     try {
@@ -98,6 +154,14 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
         customerId: cid,
       })) as { id: string };
     } catch (e: any) {
+      // Release any reserved store credits if Razorpay order initialization fails
+      if (storeCreditsUsed.length > 0) {
+        const { releaseStoreCreditReservations } = await import("../credit/credit.service.js");
+        await releaseStoreCreditReservations({
+          orderId: targetOrderId,
+          reason: "RAZORPAY_INIT_FAILED",
+        });
+      }
       let msg = "Razorpay payment creation failed";
       if (
         e &&
@@ -119,6 +183,9 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
       draft,
       shippingAddress: body.shippingAddress as ShippingAddressInput,
       razorpayOrderId: rzOrder.id,
+      orderId: targetOrderId,
+      storeCreditAmount,
+      storeCreditsUsed,
     });
 
     res.status(201).json({
@@ -126,6 +193,8 @@ export async function postCheckout(req: Request, res: Response, next: NextFuncti
       orderNumber: order.orderNumber,
       razorpayOrderId: payment.razorpayOrderId,
       amount: amountPaise,
+      payableAmount,
+      storeCreditAmount,
       currency: "INR",
       key: process.env.RAZORPAY_KEY_ID ?? "",
       displayTotal: draft.total,

@@ -5,6 +5,7 @@ import { ensureAdminFromEnv } from "./utils/ensureAdmin.js";
 import { startReminderJob } from "./jobs/reminderJob.js";
 import { startTrackingSyncJob } from "./jobs/trackingSyncJob.js";
 import { startReservationExpiryWorker } from "./modules/inventory/reservation-expiry.worker.js";
+import { startCreditExpiryWorker } from "./modules/credit/credit-expiry.worker.js";
 import { runP0Migration } from "./migrations/migrate-p0-indexes.js";
 
 async function main() {
@@ -14,6 +15,7 @@ async function main() {
   startReminderJob();
   startTrackingSyncJob();
   startReservationExpiryWorker();
+  startCreditExpiryWorker();
   const app = createApp();
   const server = createServer(app);
 

@@ -97,6 +97,7 @@ const returnSettlementSchema = new Schema(
       enum: ["REFUND_GATEWAY", "STORE_CREDIT", "EXCHANGE_REPLACEMENT", "EXCHANGE_VOUCHER"],
     },
     storeCreditId: { type: Schema.Types.ObjectId, ref: "StoreCredit" },
+    creditNoteId: { type: Schema.Types.ObjectId, ref: "CreditNote" },
     exchangeVoucherId: { type: Schema.Types.ObjectId, ref: "ExchangeVoucher" },
     replacementOrderId: { type: Schema.Types.ObjectId, ref: "Order" },
     replacementOrderNumber: { type: String },

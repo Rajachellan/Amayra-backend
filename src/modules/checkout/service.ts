@@ -190,67 +190,80 @@ export async function createPendingOrderFromDraft(args: {
   draft: Awaited<ReturnType<typeof buildOrderDraft>>;
   shippingAddress: ShippingAddressInput;
   razorpayOrderId: string;
+  orderId?: mongoose.Types.ObjectId;
+  storeCreditAmount?: number;
+  storeCreditsUsed?: Array<{
+    storeCreditId: mongoose.Types.ObjectId;
+    creditNoteId: mongoose.Types.ObjectId;
+    code: string;
+    amount: number;
+  }>;
 }) {
   const cid = new mongoose.Types.ObjectId(args.customerId);
   const d = args.draft;
+  const storeCreditAmt = args.storeCreditAmount || 0;
+  const payableAmount = Math.max(0, d.total - storeCreditAmt);
 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const [order] = await Order.create(
-      [
-        {
-          orderNumber: d.orderNumber,
-          customer: cid,
-          items: d.items,
-          shippingAddress: {
-            fullName: args.shippingAddress.fullName.trim(),
-            phone: args.shippingAddress.phone.trim(),
-            line1: args.shippingAddress.line1.trim(),
-            city: args.shippingAddress.city.trim(),
-            state: args.shippingAddress.state.trim(),
-            pincode: args.shippingAddress.pincode.trim(),
-            country: (args.shippingAddress.country ?? "IN").trim() || "IN",
-          },
-          subtotal: d.subtotal,
-          discount: d.discount,
-          automaticDiscount: d.automaticDiscount,
-          couponDiscount: d.couponDiscount,
-          couponCode: d.couponCode,
-          taxableValue: d.taxableValue,
-          gstRate: d.gstRate,
-          gstAmount: d.gstAmount,
-          discountSlab: d.discountSlab,
-          tax: d.tax,
-          shipping: d.shipping,
-          total: d.total,
-          currency: "INR",
-          status: "pending_payment",
-          orderStatus: "PENDING",
-          paymentStatus: "PENDING",
-          shippingStatus: "NOT_CREATED",
-          returnStatus: "NOT_REQUESTED",
-          refundStatus: "NOT_APPLICABLE",
-          paymentMethod: "PREPAID",
-          paymentInfo: {
-            provider: "RAZORPAY",
-            razorpayOrderId: args.razorpayOrderId,
-            status: "PENDING",
-          },
-          shippingInfo: {
-            provider: "SHIPROCKET",
-            status: "NOT_CREATED",
-          },
-        },
-      ],
-      { session }
-    );
+    const orderDocData: any = {
+      orderNumber: d.orderNumber,
+      customer: cid,
+      items: d.items,
+      shippingAddress: {
+        fullName: args.shippingAddress.fullName.trim(),
+        phone: args.shippingAddress.phone.trim(),
+        line1: args.shippingAddress.line1.trim(),
+        city: args.shippingAddress.city.trim(),
+        state: args.shippingAddress.state.trim(),
+        pincode: args.shippingAddress.pincode.trim(),
+        country: (args.shippingAddress.country ?? "IN").trim() || "IN",
+      },
+      subtotal: d.subtotal,
+      discount: d.discount,
+      automaticDiscount: d.automaticDiscount,
+      couponDiscount: d.couponDiscount,
+      couponCode: d.couponCode,
+      taxableValue: d.taxableValue,
+      gstRate: d.gstRate,
+      gstAmount: d.gstAmount,
+      discountSlab: d.discountSlab,
+      tax: d.tax,
+      shipping: d.shipping,
+      total: d.total,
+      currency: "INR",
+      storeCreditAmount: storeCreditAmt,
+      storeCreditsUsed: args.storeCreditsUsed || [],
+      status: "pending_payment",
+      orderStatus: "PENDING",
+      paymentStatus: "PENDING",
+      shippingStatus: "NOT_CREATED",
+      returnStatus: "NOT_REQUESTED",
+      refundStatus: "NOT_APPLICABLE",
+      paymentMethod: "PREPAID",
+      paymentInfo: {
+        provider: "RAZORPAY",
+        razorpayOrderId: args.razorpayOrderId,
+        status: "PENDING",
+      },
+      shippingInfo: {
+        provider: "SHIPROCKET",
+        status: "NOT_CREATED",
+      },
+    };
+
+    if (args.orderId) {
+      orderDocData._id = args.orderId;
+    }
+
+    const [order] = await Order.create([orderDocData], { session });
 
     // Create atomic inventory reservations within the same transaction
     const { createInventoryReservations } = await import("../inventory/inventory.service.js");
     await createInventoryReservations(session, cid, order._id, d.items);
 
-    const amountPaise = Math.round(d.total * 100);
+    const amountPaise = Math.round(payableAmount * 100);
 
     const [payment] = await Payment.create(
       [
@@ -272,7 +285,7 @@ export async function createPendingOrderFromDraft(args: {
     await session.commitTransaction();
     session.endSession();
 
-    return { order, payment };
+    return { order, payment, payableAmount, amountPaise };
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
@@ -304,66 +317,83 @@ export async function createCodOrderFromDraft(args: {
   customerId: string;
   draft: Awaited<ReturnType<typeof buildOrderDraft>>;
   shippingAddress: ShippingAddressInput;
+  orderId?: mongoose.Types.ObjectId;
+  storeCreditAmount?: number;
+  storeCreditsUsed?: Array<{
+    storeCreditId: mongoose.Types.ObjectId;
+    creditNoteId: mongoose.Types.ObjectId;
+    code: string;
+    amount: number;
+  }>;
 }) {
   const cid = new mongoose.Types.ObjectId(args.customerId);
   const d = args.draft;
+  const storeCreditAmt = args.storeCreditAmount || 0;
+  const codPayable = Math.max(0, d.total - storeCreditAmt);
 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const order = await Order.create(
-      [
-        {
-          orderNumber: d.orderNumber,
-          customer: cid,
-          items: d.items,
-          shippingAddress: {
-            fullName: args.shippingAddress.fullName.trim(),
-            phone: args.shippingAddress.phone.trim(),
-            line1: args.shippingAddress.line1.trim(),
-            city: args.shippingAddress.city.trim(),
-            state: args.shippingAddress.state.trim(),
-            pincode: args.shippingAddress.pincode.trim(),
-            country: (args.shippingAddress.country ?? "IN").trim() || "IN",
-          },
-          subtotal: d.subtotal,
-          discount: d.discount,
-          automaticDiscount: d.automaticDiscount,
-          couponDiscount: d.couponDiscount,
-          couponCode: d.couponCode,
-          taxableValue: d.taxableValue,
-          gstRate: d.gstRate,
-          gstAmount: d.gstAmount,
-          discountSlab: d.discountSlab,
-          tax: d.tax,
-          shipping: d.shipping,
-          total: d.total,
-          currency: "INR",
-          status: "processing", // Legacy: COD starts as processing
-          orderStatus: "CONFIRMED",
-          paymentStatus: "COD_PENDING",
-          shippingStatus: "NOT_CREATED",
-          returnStatus: "NOT_REQUESTED",
-          refundStatus: "NOT_APPLICABLE",
-          paymentMethod: "COD",
-          paymentInfo: {
-            provider: "COD",
-            status: "COD_PENDING",
-            codAmount: d.total,
-          },
-          shippingInfo: {
-            provider: "SHIPROCKET",
-            status: "NOT_CREATED",
-          },
-        },
-      ],
-      { session }
-    );
+    const orderDocData: any = {
+      orderNumber: d.orderNumber,
+      customer: cid,
+      items: d.items,
+      shippingAddress: {
+        fullName: args.shippingAddress.fullName.trim(),
+        phone: args.shippingAddress.phone.trim(),
+        line1: args.shippingAddress.line1.trim(),
+        city: args.shippingAddress.city.trim(),
+        state: args.shippingAddress.state.trim(),
+        pincode: args.shippingAddress.pincode.trim(),
+        country: (args.shippingAddress.country ?? "IN").trim() || "IN",
+      },
+      subtotal: d.subtotal,
+      discount: d.discount,
+      automaticDiscount: d.automaticDiscount,
+      couponDiscount: d.couponDiscount,
+      couponCode: d.couponCode,
+      taxableValue: d.taxableValue,
+      gstRate: d.gstRate,
+      gstAmount: d.gstAmount,
+      discountSlab: d.discountSlab,
+      tax: d.tax,
+      shipping: d.shipping,
+      total: d.total,
+      currency: "INR",
+      storeCreditAmount: storeCreditAmt,
+      storeCreditsUsed: args.storeCreditsUsed || [],
+      status: "processing", // Legacy: COD starts as processing
+      orderStatus: "CONFIRMED",
+      paymentStatus: "COD_PENDING",
+      shippingStatus: "NOT_CREATED",
+      returnStatus: "NOT_REQUESTED",
+      refundStatus: "NOT_APPLICABLE",
+      paymentMethod: "COD",
+      paymentInfo: {
+        provider: "COD",
+        status: "COD_PENDING",
+        codAmount: codPayable,
+      },
+      shippingInfo: {
+        provider: "SHIPROCKET",
+        status: "NOT_CREATED",
+      },
+    };
 
-    const createdOrder = order[0];
+    if (args.orderId) {
+      orderDocData._id = args.orderId;
+    }
+
+    const [createdOrder] = await Order.create([orderDocData], { session });
 
     const { decrementStockForOrder } = await import("../inventory/inventory.service.js");
     await decrementStockForOrder(session, createdOrder, "CUSTOMER");
+
+    // Commit any reserved store credit within the same session
+    if (args.storeCreditsUsed && args.storeCreditsUsed.length > 0) {
+      const { commitStoreCreditReservations } = await import("../credit/credit.service.js");
+      await commitStoreCreditReservations({ orderId: createdOrder._id, session });
+    }
 
     await session.commitTransaction();
     session.endSession();
@@ -377,6 +407,109 @@ export async function createCodOrderFromDraft(args: {
       source: "CUSTOMER",
       metadata: {
         paymentMethod: "COD",
+        storeCreditAmount: storeCreditAmt,
+        codAmount: codPayable,
+      },
+    });
+
+    return createdOrder;
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+}
+
+export async function createStoreCreditOrderFromDraft(args: {
+  customerId: string;
+  draft: Awaited<ReturnType<typeof buildOrderDraft>>;
+  shippingAddress: ShippingAddressInput;
+  orderId?: mongoose.Types.ObjectId;
+  storeCreditAmount: number;
+  storeCreditsUsed: Array<{
+    storeCreditId: mongoose.Types.ObjectId;
+    creditNoteId: mongoose.Types.ObjectId;
+    code: string;
+    amount: number;
+  }>;
+}) {
+  const cid = new mongoose.Types.ObjectId(args.customerId);
+  const d = args.draft;
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const orderDocData: any = {
+      orderNumber: d.orderNumber,
+      customer: cid,
+      items: d.items,
+      shippingAddress: {
+        fullName: args.shippingAddress.fullName.trim(),
+        phone: args.shippingAddress.phone.trim(),
+        line1: args.shippingAddress.line1.trim(),
+        city: args.shippingAddress.city.trim(),
+        state: args.shippingAddress.state.trim(),
+        pincode: args.shippingAddress.pincode.trim(),
+        country: (args.shippingAddress.country ?? "IN").trim() || "IN",
+      },
+      subtotal: d.subtotal,
+      discount: d.discount,
+      automaticDiscount: d.automaticDiscount,
+      couponDiscount: d.couponDiscount,
+      couponCode: d.couponCode,
+      taxableValue: d.taxableValue,
+      gstRate: d.gstRate,
+      gstAmount: d.gstAmount,
+      discountSlab: d.discountSlab,
+      tax: d.tax,
+      shipping: d.shipping,
+      total: d.total,
+      currency: "INR",
+      storeCreditAmount: args.storeCreditAmount,
+      storeCreditsUsed: args.storeCreditsUsed,
+      status: "paid",
+      orderStatus: "CONFIRMED",
+      paymentStatus: "CAPTURED",
+      shippingStatus: "NOT_CREATED",
+      returnStatus: "NOT_REQUESTED",
+      refundStatus: "NOT_APPLICABLE",
+      paymentMethod: "STORE_CREDIT",
+      paymentInfo: {
+        provider: "STORE_CREDIT",
+        status: "CAPTURED",
+      },
+      shippingInfo: {
+        provider: "SHIPROCKET",
+        status: "NOT_CREATED",
+      },
+    };
+
+    if (args.orderId) {
+      orderDocData._id = args.orderId;
+    }
+
+    const [createdOrder] = await Order.create([orderDocData], { session });
+
+    const { decrementStockForOrder } = await import("../inventory/inventory.service.js");
+    await decrementStockForOrder(session, createdOrder, "CUSTOMER");
+
+    // Commit reserved store credit within the session
+    const { commitStoreCreditReservations } = await import("../credit/credit.service.js");
+    await commitStoreCreditReservations({ orderId: createdOrder._id, session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    const { recordOrderEvent } = await import("../order/order.service.js");
+    await recordOrderEvent({
+      orderId: createdOrder._id,
+      eventType: "ORDER_CREATED",
+      previousStatus: undefined,
+      newStatus: "CONFIRMED",
+      source: "CUSTOMER",
+      metadata: {
+        paymentMethod: "STORE_CREDIT",
+        storeCreditAmount: args.storeCreditAmount,
       },
     });
 

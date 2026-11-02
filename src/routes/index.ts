@@ -48,6 +48,7 @@ import * as inventoryController from "../modules/inventory/inventory.controller.
 import * as auditController from "../modules/audit/audit.controller.js";
 import * as pricingController from "../modules/pricing/pricing.controller.js";
 import * as couponController from "../modules/coupon/coupon.controller.js";
+import * as creditController from "../modules/credit/credit.controller.js";
 import { storeUploadedFile } from "../services/storageUpload.js";
 import { AppError } from "../utils/AppError.js";
 
@@ -131,6 +132,12 @@ router.post(
   orderCustomerController.postVerifyPayment
 );
 router.get("/orders/me", authenticateCustomer, orderCustomerController.listMyOrders);
+router.post(
+  "/store-credits/validate",
+  authenticateCustomer,
+  creditController.postValidateCreditCoupon
+);
+router.get("/store-credits/me", authenticateCustomer, creditController.getMyStoreCredits);
 router.get(
   "/orders/:id/tracking",
   authenticateCustomer,
@@ -312,6 +319,62 @@ router.post(
   authenticateAdmin,
   requirePermission("orders:write"),
   returnController.postCreateReplacementOrder
+);
+
+// Admin Credit Notes & Store Credit API
+router.get(
+  "/admin/credit-notes",
+  authenticateAdmin,
+  requirePermission("orders:read"),
+  creditController.getCreditNotesAdmin
+);
+router.post(
+  "/admin/credit-notes/issue-manual",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  creditController.postIssueManualCreditNote
+);
+router.get(
+  "/admin/credit-notes/order-lookup",
+  authenticateAdmin,
+  requirePermission("orders:read"),
+  creditController.getOrderForCreditNote
+);
+router.get(
+  "/admin/credit-notes/:id",
+  authenticateAdmin,
+  requirePermission("orders:read"),
+  creditController.getCreditNoteDetailsAdminHandler
+);
+router.get(
+  "/admin/credit-notes/:id/pdf",
+  authenticateAdmin,
+  requirePermission("orders:read"),
+  creditController.downloadCreditNotePdfHandler
+);
+router.post(
+  "/admin/credit-notes/:id/resend-email",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  creditController.resendCreditNoteEmailHandler
+);
+router.post(
+  "/admin/credit-notes/:id/cancel",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  creditController.cancelCreditNoteAdminHandler
+);
+router.post(
+  "/admin/credit-notes/:id/revert",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  creditController.revertCreditNoteAdminHandler
+);
+router.post(
+  "/admin/credit-notes/:id/reactivate",
+  authenticateAdmin,
+  requirePermission("orders:write"),
+  creditController.reactivateCreditNoteAdminHandler
 );
 
 router.get("/admin/reasons", authenticateAdmin, returnController.getAdminReasons);
