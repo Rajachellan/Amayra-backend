@@ -176,3 +176,28 @@ export async function getOrderHistory(
     next(e);
   }
 }
+
+export async function postReconcileOrderPaymentsAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const lookbackDays = Number(req.body?.lookbackDays) || 14;
+    const { reconcilePendingRazorpayPayments } =
+      await import("../payment/reconciliation.service.js");
+    const result = await reconcilePendingRazorpayPayments({ lookbackDays });
+    res.json({
+      ok: true,
+      ...result,
+      message:
+        result.reconciledCount > 0
+          ? `Recovered ${result.reconciledCount} paid order(s): ${result.reconciledOrders
+              .map((o) => o.orderNumber || o.orderId)
+              .join(", ")}`
+          : `All ${result.checked} recent pending/failed payment(s) are already in sync with Razorpay.`,
+    });
+  } catch (e) {
+    next(e);
+  }
+}

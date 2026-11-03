@@ -11,7 +11,10 @@ const POST_PAYMENT_STATUSES = ["paid", "processing", "shipped", "delivered"] as 
 export function orderListVisibilityFilter(): FilterQuery<OrderDoc> {
   return {
     status: { $ne: "cancelled" },
-    $or: [{ paymentMethod: "cod" }, { status: { $in: [...POST_PAYMENT_STATUSES] } }],
+    $or: [
+      { paymentMethod: { $in: ["cod", "COD"] } },
+      { status: { $in: [...POST_PAYMENT_STATUSES] } },
+    ],
   };
 }
 
@@ -21,7 +24,7 @@ export function orderIsVisibleToCustomer(o: {
   paymentMethod?: string | null;
 }): boolean {
   if (o.status === "cancelled") return false;
-  if (o.paymentMethod === "cod") return true;
+  if (o.paymentMethod?.toLowerCase() === "cod") return true;
   return (POST_PAYMENT_STATUSES as readonly string[]).includes(o.status);
 }
 

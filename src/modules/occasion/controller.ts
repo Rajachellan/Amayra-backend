@@ -27,7 +27,7 @@ export async function listOccasions(
   next: NextFunction
 ): Promise<void> {
   try {
-    const list = await Occasion.find({ active: true }).sort({ order: 1, name: 1 });
+    const list = await Occasion.find({ active: true }).sort({ order: 1, name: 1 }).lean();
     res.json(list);
   } catch (e) {
     next(e);

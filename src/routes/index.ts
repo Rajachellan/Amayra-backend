@@ -211,6 +211,11 @@ router.post(
 router.get("/admin/occasions", authenticateAdmin, occasionController.listOccasionsAdmin);
 
 router.get("/admin/orders", authenticateAdmin, orderAdminController.listOrdersAdmin);
+router.post(
+  "/admin/orders/reconcile-payments",
+  authenticateAdmin,
+  orderAdminController.postReconcileOrderPaymentsAdmin
+);
 router.get(
   "/admin/shiprocket/pickups",
   authenticateAdmin,

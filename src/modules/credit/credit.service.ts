@@ -851,6 +851,86 @@ export async function commitStoreCreditReservations(args: {
       }).catch((e) => logger.error(e, "Failed to send credit redeemed email"));
     }
   }
+
+  // Recovery path: if an earlier payment attempt failed/expired and released the reservation,
+  // re-commit any store credits listed on order.storeCreditsUsed that were not yet redeemed.
+  const usedList = Array.isArray(order.storeCreditsUsed) ? (order.storeCreditsUsed as any[]) : [];
+  for (const usedEntry of usedList) {
+    if (!usedEntry?.creditId || !usedEntry?.amount) continue;
+    const credit = await StoreCredit.findById(usedEntry.creditId).session(session ?? null);
+    if (!credit) continue;
+
+    const alreadyRedeemed = credit.usageHistory?.some(
+      (u: any) => u.orderId?.toString() === orderId.toString()
+    );
+    if (alreadyRedeemed) continue;
+
+    const amount = Math.min(Number(usedEntry.amount) || 0, credit.availableBalance);
+    if (amount <= 0) continue;
+
+    const balanceBefore = credit.availableBalance;
+    const balanceAfter = Math.max(0, balanceBefore - amount);
+    const newRedeemed = credit.redeemedAmount + amount;
+    const newStatus = balanceAfter === 0 ? "EXHAUSTED" : "PARTIALLY_REDEEMED";
+
+    await StoreCredit.updateOne(
+      { _id: credit._id },
+      {
+        $set: {
+          availableBalance: balanceAfter,
+          redeemedAmount: newRedeemed,
+          status: newStatus,
+        },
+        $push: {
+          usageHistory: {
+            orderId,
+            amountUsed: amount,
+            usedAt: new Date(),
+          },
+        },
+      },
+      { session }
+    );
+
+    if (credit.creditNoteId) {
+      await CreditNote.updateOne(
+        { _id: credit.creditNoteId },
+        {
+          $set: {
+            redeemedAmount: newRedeemed,
+            remainingBalance: balanceAfter,
+            status: newStatus,
+          },
+        },
+        { session }
+      );
+    }
+
+    await StoreCreditTransaction.create(
+      [
+        {
+          storeCreditId: credit._id,
+          creditNoteId: credit.creditNoteId,
+          customerId: credit.customerId,
+          transactionType: "CREDIT_REDEEMED",
+          amount,
+          orderId,
+          orderNumber: order.orderNumber,
+          balanceBefore,
+          balanceAfter,
+          reservedBalanceBefore: credit.reservedBalance,
+          reservedBalanceAfter: credit.reservedBalance,
+          transactionDate: new Date(),
+          description: `Redeemed ₹${amount} for Order ${order.orderNumber} (post-release recovery)`,
+          performedBy: {
+            id: credit.customerId as any,
+            role: "CUSTOMER",
+          },
+        },
+      ],
+      { session }
+    );
+  }
 }
 
 /**

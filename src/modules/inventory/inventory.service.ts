@@ -201,22 +201,24 @@ export async function convertReservationsToSale(
     return { converted: false, alreadyDone: true };
   }
 
-  if (reservation.status !== "ACTIVE") {
+  const priorStatus = reservation.status;
+  if (priorStatus !== "ACTIVE" && priorStatus !== "RELEASED" && priorStatus !== "EXPIRED") {
     throw new AppError(
       400,
-      `Cannot convert reservation ${reservation.reservationId} with status ${reservation.status}`
+      `Cannot convert reservation ${reservation.reservationId} with status ${priorStatus}`
     );
   }
 
-  // Atomic state transition from ACTIVE to CONVERTED
+  // Atomic state transition from ACTIVE / RELEASED / EXPIRED to CONVERTED
   const updateRes = await InventoryReservation.updateOne(
-    { _id: reservation._id, status: "ACTIVE" },
+    { _id: reservation._id, status: priorStatus },
     {
       $set: {
         status: "CONVERTED",
         convertedAt: new Date(),
         paymentId: paymentId || reservation.paymentId,
       },
+      ...(priorStatus !== "ACTIVE" ? { $unset: { releaseReason: 1 } } : {}),
     },
     { session: session ?? undefined }
   );
@@ -229,46 +231,112 @@ export async function convertReservationsToSale(
     throw new AppError(400, "Reservation state changed concurrently");
   }
 
-  // Stock accounting: stock remains unchanged, reservedStock decreases, soldCount increases
-  for (const item of reservation.items) {
-    const pid = item.productId.toString();
-    const qty = item.quantity;
+  if (priorStatus === "ACTIVE") {
+    // Stock accounting for ACTIVE reservation: stock was already deducted at reservation time;
+    // decrement reservedStock and increment soldCount / trendingScore.
+    for (const item of reservation.items) {
+      const pid = item.productId.toString();
+      const qty = item.quantity;
 
-    const product = await Product.findById(pid).session(session);
-    const previousStock = product ? product.stock : 0;
+      const product = await Product.findById(pid).session(session);
+      const previousStock = product ? product.stock : 0;
 
-    await Product.updateOne(
-      { _id: pid },
-      {
-        $inc: {
-          reservedStock: -qty,
-          soldCount: qty,
-          trendingScore: qty,
-        },
-      },
-      { session: session ?? undefined }
-    );
-
-    // Create SALE InventoryLedger
-    await InventoryLedger.create(
-      [
+      await Product.updateOne(
+        { _id: pid },
         {
-          productId: item.productId,
-          quantity: -qty,
-          type: "SALE",
-          referenceType: "ORDER",
-          referenceId: orderId,
-          previousStock,
-          newStock: previousStock,
-          createdBy,
+          $inc: {
+            reservedStock: -qty,
+            soldCount: qty,
+            trendingScore: qty,
+          },
         },
-      ],
-      { session: session ?? undefined }
-    );
+        { session: session ?? undefined }
+      );
 
-    logger.info(
-      `[InventoryReservation] Converted item ${item.sku} (qty: ${qty}) for order ${orderId}. Available stock: ${previousStock}.`
-    );
+      // Create SALE InventoryLedger
+      await InventoryLedger.create(
+        [
+          {
+            productId: item.productId,
+            quantity: -qty,
+            type: "SALE",
+            referenceType: "ORDER",
+            referenceId: orderId,
+            previousStock,
+            newStock: previousStock,
+            createdBy,
+          },
+        ],
+        { session: session ?? undefined }
+      );
+
+      logger.info(
+        `[InventoryReservation] Converted item ${item.sku} (qty: ${qty}) for order ${orderId}. Available stock: ${previousStock}.`
+      );
+    }
+  } else {
+    // Reservation was previously RELEASED (e.g. earlier failed Razorpay attempt on same order)
+    // or EXPIRED (customer completed UPI/bank payment after reservation TTL).
+    // Stock was already restored and reservedStock was already decremented when released/expired,
+    // so deduct directly from available stock (clamping at 0 so captured payment never fails).
+    for (const item of reservation.items) {
+      const pid = item.productId.toString();
+      const qty = item.quantity;
+
+      const product = await Product.findById(pid).session(session);
+      const previousStock = product ? product.stock : 0;
+
+      const decRes = await Product.updateOne(
+        { _id: pid, stock: { $gte: qty } },
+        {
+          $inc: {
+            stock: -qty,
+            soldCount: qty,
+            trendingScore: qty,
+          },
+        },
+        { session: session ?? undefined }
+      );
+
+      let newStock = previousStock - qty;
+      if (!decRes.modifiedCount) {
+        newStock = 0;
+        logger.warn(
+          `[InventoryReservation] Captured payment on ${priorStatus} reservation ${reservation.reservationId} for item ${item.sku} (order ${orderId}) had stock ${previousStock} < qty ${qty}; clamping stock to 0.`
+        );
+        await Product.updateOne(
+          { _id: pid },
+          {
+            $set: { stock: 0 },
+            $inc: {
+              soldCount: qty,
+              trendingScore: qty,
+            },
+          },
+          { session: session ?? undefined }
+        );
+      }
+
+      await InventoryLedger.create(
+        [
+          {
+            productId: item.productId,
+            quantity: -qty,
+            type: "SALE",
+            referenceType: "ORDER",
+            referenceId: orderId,
+            previousStock,
+            newStock,
+            createdBy,
+          },
+        ],
+        { session: session ?? undefined }
+      );
+
+      logger.info(
+        `[InventoryReservation] Recovered ${priorStatus} reservation ${reservation.reservationId} for item ${item.sku} (qty: ${qty}) on order ${orderId}. Available stock: ${previousStock} -> ${newStock}.`
+      );
+    }
   }
 
   return { converted: true, alreadyDone: false };

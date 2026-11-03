@@ -6,6 +6,7 @@ import { startReminderJob } from "./jobs/reminderJob.js";
 import { startTrackingSyncJob } from "./jobs/trackingSyncJob.js";
 import { startReservationExpiryWorker } from "./modules/inventory/reservation-expiry.worker.js";
 import { startCreditExpiryWorker } from "./modules/credit/credit-expiry.worker.js";
+import { startPaymentReconciliationWorker } from "./modules/payment/reconciliation.service.js";
 import { runP0Migration } from "./migrations/migrate-p0-indexes.js";
 
 async function main() {
@@ -16,6 +17,7 @@ async function main() {
   startTrackingSyncJob();
   startReservationExpiryWorker();
   startCreditExpiryWorker();
+  startPaymentReconciliationWorker();
   const app = createApp();
   const server = createServer(app);
 
