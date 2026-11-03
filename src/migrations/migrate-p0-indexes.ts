@@ -3,6 +3,7 @@ import { connectDatabase, disconnectDatabase } from "../config/database.js";
 import { Product } from "../models/Product.js";
 import { InventoryReservation } from "../modules/inventory/reservation.model.js";
 import { WebhookEvent } from "../modules/webhook/webhook-event.model.js";
+import { ensureCreditCollectionsAndIndexes } from "../modules/credit/credit.service.js";
 import { seedPromotionalGift } from "../seed/seed-promotional-gift.js";
 import { logger } from "../config/logger.js";
 
@@ -44,7 +45,11 @@ export async function runP0Migration(): Promise<void> {
   await WebhookEvent.createIndexes();
   logger.info("[Migration:P0] Created WebhookEvent indexes.");
 
-  // 4. Seed promotional gift GIFT799
+  // 4. Ensure CreditNote, StoreCredit, and StoreCreditTransaction collections & clean indexes
+  await ensureCreditCollectionsAndIndexes(true);
+  logger.info("[Migration:P0] Ensured CreditNote & StoreCredit collections and indexes.");
+
+  // 5. Seed promotional gift GIFT799
   const gift = await seedPromotionalGift();
   logger.info(`[Migration:P0] Seeded promotional gift product: ${gift.sku} (ID: ${gift._id})`);
 

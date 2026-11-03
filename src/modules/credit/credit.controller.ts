@@ -260,7 +260,7 @@ export async function postIssueManualCreditNote(
 ): Promise<void> {
   try {
     const adminId = (req as any).adminId;
-    const adminName = (req as any).adminName || "Admin";
+    const adminName = (req as any).adminName || (req as any).adminEmail || "Admin";
     if (!adminId) throw new AppError(401, "Admin unauthorized");
 
     const { orderId, selectedItems, amount, issueReason, adminNotes } = req.body as {

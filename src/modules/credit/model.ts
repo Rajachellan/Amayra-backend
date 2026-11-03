@@ -36,7 +36,13 @@ const storeCreditSchema = new Schema(
     customerId: { type: Schema.Types.ObjectId, ref: "Customer", required: true, index: true },
     creditNoteId: { type: Schema.Types.ObjectId, ref: "CreditNote", index: true },
     originalOrderId: { type: Schema.Types.ObjectId, ref: "Order", required: true },
-    returnRequestId: { type: Schema.Types.ObjectId, ref: "Return", required: false, index: true },
+    returnRequestId: {
+      type: Schema.Types.ObjectId,
+      ref: "Return",
+      required: false,
+      sparse: true,
+      index: true,
+    },
     initialBalance: { type: Number, required: true, min: 0 },
     availableBalance: { type: Number, required: true, min: 0 },
     reservedBalance: { type: Number, required: true, default: 0, min: 0 },
@@ -59,7 +65,7 @@ const storeCreditSchema = new Schema(
 );
 
 // Keep aliases in sync on save
-storeCreditSchema.pre("save", function (next) {
+storeCreditSchema.pre("save", function () {
   if (this.isModified("initialBalance") || this.originalAmount === undefined) {
     this.originalAmount = this.initialBalance;
   }
@@ -72,7 +78,6 @@ storeCreditSchema.pre("save", function (next) {
   if (!this.creditCode && this.couponCode) {
     this.creditCode = this.couponCode;
   }
-  next();
 });
 
 storeCreditSchema.index({ customerId: 1, status: 1 });

@@ -32,8 +32,20 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
 
   if (err instanceof mongoose.Error.ValidationError) {
-    sendLegacyError(res, "Validation failed", 400);
+    const details = Object.values(err.errors)
+      .map((e) => e.message)
+      .filter(Boolean)
+      .join("; ");
+    sendLegacyError(res, details || "Validation failed", 400);
     logger.warn({ requestId, err: err.message }, "Mongoose validation error");
+    return;
+  }
+
+  if (err && typeof err === "object" && (err as { code?: number }).code === 11000) {
+    const keyPattern = (err as { keyPattern?: Record<string, unknown> }).keyPattern;
+    const dupFields = keyPattern ? Object.keys(keyPattern).join(", ") : "record";
+    logger.error({ requestId, err }, "MongoDB duplicate key conflict");
+    sendLegacyError(res, `Duplicate conflict on ${dupFields}. Please try again.`, 409);
     return;
   }
 

@@ -66,6 +66,106 @@ export function generateSecureCouponCode(): string {
   return `SC-${randomPart1}-${randomPart2}`;
 }
 
+let creditCollectionsReadyPromise: Promise<void> | null = null;
+
+/**
+ * Ensures CreditNote, StoreCredit, and StoreCreditTransaction collections & indexes exist
+ * outside of multi-document transactions (preventing MongoDB Error 263 on Atlas Shared Tier)
+ * and drops any legacy/stale unique indexes (e.g. code_1, non-sparse returnRequestId_1).
+ */
+export async function ensureCreditCollectionsAndIndexes(force = false): Promise<void> {
+  if (creditCollectionsReadyPromise && !force) {
+    return creditCollectionsReadyPromise;
+  }
+
+  creditCollectionsReadyPromise = (async () => {
+    await CreditNote.createCollection().catch(() => {});
+    await StoreCredit.createCollection().catch(() => {});
+    await StoreCreditTransaction.createCollection().catch(() => {});
+
+    // Unset explicit null returnRequestId values so sparse indexes ignore manual credit notes
+    await CreditNote.collection
+      .updateMany({ returnRequestId: null }, { $unset: { returnRequestId: "" } })
+      .catch(() => {});
+    await StoreCredit.collection
+      .updateMany({ returnRequestId: null }, { $unset: { returnRequestId: "" } })
+      .catch(() => {});
+
+    const cnIndexes = await CreditNote.collection.indexes().catch(() => []);
+    for (const idx of cnIndexes) {
+      if (!idx.name || idx.name === "_id_") continue;
+      const hasLegacyField = Boolean(idx.key && ("code" in idx.key || "returnId" in idx.key));
+      const isUnexpectedUnique =
+        Boolean(idx.unique) && idx.name !== "creditNoteNumber_1" && idx.name !== "couponCode_1";
+      const isNonSparseReturnReq = idx.name === "returnRequestId_1" && !idx.sparse;
+
+      if (hasLegacyField || isUnexpectedUnique || isNonSparseReturnReq) {
+        await CreditNote.collection
+          .dropIndex(idx.name)
+          .then(() =>
+            logger.info(`[CreditMigration] Dropped stale index ${idx.name} on creditnotes`)
+          )
+          .catch((e) =>
+            logger.warn({ err: e }, `[CreditMigration] Could not drop index ${idx.name}`)
+          );
+      }
+    }
+
+    const scIndexes = await StoreCredit.collection.indexes().catch(() => []);
+    for (const idx of scIndexes) {
+      if (!idx.name || idx.name === "_id_") continue;
+      const hasLegacyField = Boolean(idx.key && ("code" in idx.key || "returnId" in idx.key));
+      const isUnexpectedUnique =
+        Boolean(idx.unique) && idx.name !== "creditCode_1" && idx.name !== "couponCode_1";
+      const isNonSparseReturnReq = idx.name === "returnRequestId_1" && !idx.sparse;
+
+      if (hasLegacyField || isUnexpectedUnique || isNonSparseReturnReq) {
+        await StoreCredit.collection
+          .dropIndex(idx.name)
+          .then(() =>
+            logger.info(`[CreditMigration] Dropped stale index ${idx.name} on storecredits`)
+          )
+          .catch((e) =>
+            logger.warn({ err: e }, `[CreditMigration] Could not drop index ${idx.name}`)
+          );
+      }
+    }
+
+    await CreditNote.createIndexes().catch((e) =>
+      logger.warn({ err: e }, "[CreditMigration] CreditNote.createIndexes warning")
+    );
+    await StoreCredit.createIndexes().catch((e) =>
+      logger.warn({ err: e }, "[CreditMigration] StoreCredit.createIndexes warning")
+    );
+    await StoreCreditTransaction.createIndexes().catch((e) =>
+      logger.warn({ err: e }, "[CreditMigration] StoreCreditTransaction.createIndexes warning")
+    );
+  })().catch((err) => {
+    creditCollectionsReadyPromise = null;
+    logger.warn({ err }, "[CreditMigration] ensureCreditCollectionsAndIndexes warning");
+  });
+
+  return creditCollectionsReadyPromise;
+}
+
+function isTransientCreditTxError(err: any): boolean {
+  if (!err) return false;
+  if (typeof err.hasErrorLabel === "function" && err.hasErrorLabel("TransientTransactionError")) {
+    return true;
+  }
+  return err.code === 112 || err.codeName === "WriteConflict";
+}
+
+function isUnsupportedTxError(err: any): boolean {
+  if (!err) return false;
+  return (
+    err.code === 263 ||
+    err.code === 20 ||
+    err.codeName === "OperationNotSupportedInTransaction" ||
+    err.codeName === "IllegalOperation"
+  );
+}
+
 /**
  * Issue Credit Note and Store Credit for a Return settlement.
  * Strict validation: 90 days validity, duplicate check, atomic transaction ledger.
@@ -75,6 +175,8 @@ export async function issueCreditNoteForReturn(args: {
   adminId: string;
 }): Promise<{ creditNote: CreditNoteDoc; storeCredit: StoreCreditDoc }> {
   const { returnId, adminId } = args;
+
+  await ensureCreditCollectionsAndIndexes();
 
   const returnDoc = await Return.findById(returnId);
   if (!returnDoc) throw new AppError(404, "Return request not found");
@@ -190,7 +292,10 @@ export async function issueCreditNoteForReturn(args: {
           transactionDate: issuedDate,
           description: `Issued Credit Note ${creditNoteNumber} for Return ${returnDoc.returnNumber} (Validity 90 Days)`,
           performedBy: {
-            id: new mongoose.Types.ObjectId(adminId),
+            id:
+              adminId && mongoose.isValidObjectId(adminId)
+                ? new mongoose.Types.ObjectId(adminId)
+                : undefined,
             role: "ADMIN",
             name: "Admin",
           },
@@ -300,65 +405,89 @@ export async function issueManualCreditNote(args: {
     throw new AppError(400, "Issue reason is mandatory (e.g. Damaged in Transit, Defective, etc.)");
   }
 
+  await ensureCreditCollectionsAndIndexes();
+
   // Find order by ID or orderNumber
-  let orderQuery: any = { orderNumber: orderId.trim() };
-  if (mongoose.isValidObjectId(orderId.trim())) {
+  const trimmedOrderRef = String(orderId).trim();
+  let orderQuery: any = { orderNumber: trimmedOrderRef };
+  if (mongoose.isValidObjectId(trimmedOrderRef)) {
     orderQuery = {
-      $or: [{ _id: new mongoose.Types.ObjectId(orderId.trim()) }, { orderNumber: orderId.trim() }],
+      $or: [
+        { _id: new mongoose.Types.ObjectId(trimmedOrderRef) },
+        { orderNumber: trimmedOrderRef },
+      ],
     };
   }
   const order = await Order.findOne(orderQuery);
-  if (!order) throw new AppError(404, `Order '${orderId}' not found`);
+  if (!order) throw new AppError(404, `Order '${trimmedOrderRef}' not found`);
 
-  // Find customer
-  const customer = await Customer.findById(order.customer);
-  const customerId = customer?._id || order.customer;
-  const customerName = customer?.name || order.shippingAddress?.fullName || "Valued Customer";
-  const emailToNotify = customer?.email || "";
+  // Find customer safely (handling ObjectId or populated object)
+  const rawCustomerId =
+    order.customer && typeof order.customer === "object" && "_id" in (order.customer as any)
+      ? (order.customer as any)._id
+      : order.customer;
+  const customer = rawCustomerId ? await Customer.findById(rawCustomerId) : null;
+  const customerId = customer?._id || rawCustomerId;
+  if (!customerId) {
+    throw new AppError(400, "Order has no associated customer account to issue store credit");
+  }
+  const customerName =
+    customer?.name?.trim() || order.shippingAddress?.fullName?.trim() || "Valued Customer";
+  const emailToNotify = (customer?.email || "").trim().toLowerCase();
 
   // Calculate settlement amount
   let calculatedAmount = 0;
   const returnedProductDetails = selectedItems.map((it) => {
-    const qty = Number(it.quantity) || 1;
-    const price = Number(it.unitPrice) || 0;
+    const qty = Math.max(1, Number(it.quantity) || 1);
+    const price = Math.max(0, Number(it.unitPrice) || 0);
     const itemTotal = qty * price;
     calculatedAmount += itemTotal;
+    const rawPid =
+      it.productId && typeof it.productId === "object" && "_id" in (it.productId as any)
+        ? String((it.productId as any)._id)
+        : it.productId
+          ? String(it.productId).trim()
+          : "";
     return {
       productId:
-        it.productId && mongoose.isValidObjectId(it.productId)
-          ? new mongoose.Types.ObjectId(it.productId)
+        rawPid && mongoose.isValidObjectId(rawPid)
+          ? new mongoose.Types.ObjectId(rawPid)
           : undefined,
-      name: it.name || "Product",
-      sku: it.sku || "",
-      size: it.size || "",
+      name: (it.name && String(it.name).trim()) || "Product",
+      sku: it.sku ? String(it.sku).trim() : "",
+      size: it.size ? String(it.size).trim() : "",
       quantity: qty,
       unitPrice: price,
       totalAmount: itemTotal,
     };
   });
 
+  const requestedAmount = args.amount != null ? Number(args.amount) : NaN;
   const finalAmount =
-    args.amount != null && args.amount > 0 ? Number(args.amount) : calculatedAmount;
-  if (finalAmount <= 0) {
+    Number.isFinite(requestedAmount) && requestedAmount > 0 ? requestedAmount : calculatedAmount;
+  if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
     throw new AppError(400, "Issued credit amount must be greater than 0");
   }
 
   const issuedDate = new Date();
   const expiryDate = calculateExpiryDate(issuedDate);
-  const creditNoteNumber = await generateCreditNoteNumber();
-  const couponCode = generateSecureCouponCode();
+  const adminObjId =
+    adminId && mongoose.isValidObjectId(adminId) ? new mongoose.Types.ObjectId(adminId) : undefined;
 
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const persistManualCreditDocs = async (
+    session: mongoose.ClientSession | undefined,
+    creditNoteNumber: string,
+    couponCode: string
+  ): Promise<{ creditNote: CreditNoteDoc; storeCredit: StoreCreditDoc }> => {
+    const sessionOpts = session ? { session } : undefined;
 
-  try {
     const [creditNote] = await CreditNote.create(
       [
         {
           creditNoteNumber,
           customerId,
           customerName,
-          customerEmail: emailToNotify.toLowerCase(),
+          customerEmail: emailToNotify,
           originalOrderId: order._id,
           originalOrderNumber: order.orderNumber,
           returnRequestNumber: `MANUAL-${creditNoteNumber}`,
@@ -374,97 +503,181 @@ export async function issueManualCreditNote(args: {
           issueType: "MANUAL_ISSUE",
           issueReason: issueReason.trim(),
           adminNotes: adminNotes?.trim() || "",
-          qcNotes: adminNotes
+          qcNotes: adminNotes?.trim()
             ? `Manual Claim [${issueReason.trim()}]: ${adminNotes.trim()}`
             : `Manual Claim: ${issueReason.trim()}`,
         },
       ],
-      { session }
+      sessionOpts
     );
 
-    const [storeCredit] = await StoreCredit.create(
-      [
-        {
-          creditCode: couponCode,
-          couponCode,
-          customerId,
-          creditNoteId: creditNote._id,
-          originalOrderId: order._id,
-          initialBalance: finalAmount,
-          availableBalance: finalAmount,
-          reservedBalance: 0,
-          redeemedAmount: 0,
-          issuedDate,
-          expiryDate,
-          status: "ACTIVE",
-        },
-      ],
-      { session }
-    );
-
-    // Record immutable financial ledger entry: CREDIT_ISSUED
-    await StoreCreditTransaction.create(
-      [
-        {
-          storeCreditId: storeCredit._id,
-          creditNoteId: creditNote._id,
-          customerId,
-          transactionType: "CREDIT_ISSUED",
-          amount: finalAmount,
-          balanceBefore: 0,
-          balanceAfter: finalAmount,
-          reservedBalanceBefore: 0,
-          reservedBalanceAfter: 0,
-          transactionDate: issuedDate,
-          description: `Manual Credit Note ${creditNoteNumber} issued for Order ${order.orderNumber} (Reason: ${issueReason.trim()}, Validity 90 Days)`,
-          performedBy: {
-            id:
-              adminId && mongoose.isValidObjectId(adminId)
-                ? new mongoose.Types.ObjectId(adminId)
-                : undefined,
-            role: "ADMIN",
-            name: adminName || "Admin",
-          },
-          metadata: {
-            creditNoteNumber,
+    try {
+      const [storeCredit] = await StoreCredit.create(
+        [
+          {
+            creditCode: couponCode,
             couponCode,
-            orderNumber: order.orderNumber,
-            issueReason: issueReason.trim(),
+            customerId,
+            creditNoteId: creditNote._id,
+            originalOrderId: order._id,
+            initialBalance: finalAmount,
+            availableBalance: finalAmount,
+            originalAmount: finalAmount,
+            remainingBalance: finalAmount,
+            reservedBalance: 0,
+            redeemedAmount: 0,
+            issuedDate,
             expiryDate,
-            manual: true,
+            status: "ACTIVE",
           },
-        },
-      ],
-      { session }
-    );
+        ],
+        sessionOpts
+      );
 
-    await session.commitTransaction();
-    session.endSession();
+      try {
+        await StoreCreditTransaction.create(
+          [
+            {
+              storeCreditId: storeCredit._id,
+              creditNoteId: creditNote._id,
+              customerId,
+              transactionType: "CREDIT_ISSUED",
+              amount: finalAmount,
+              orderId: order._id,
+              orderNumber: order.orderNumber,
+              balanceBefore: 0,
+              balanceAfter: finalAmount,
+              reservedBalanceBefore: 0,
+              reservedBalanceAfter: 0,
+              transactionDate: issuedDate,
+              description: `Manual Credit Note ${creditNoteNumber} issued for Order ${order.orderNumber} (Reason: ${issueReason.trim()}, Validity 90 Days)`,
+              performedBy: {
+                id: adminObjId,
+                role: "ADMIN",
+                name: adminName || "Admin",
+              },
+              metadata: {
+                creditNoteNumber,
+                couponCode,
+                orderNumber: order.orderNumber,
+                issueReason: issueReason.trim(),
+                expiryDate,
+                manual: true,
+              },
+            },
+          ],
+          sessionOpts
+        );
+      } catch (txCreateErr) {
+        if (!session) {
+          await StoreCredit.deleteOne({ _id: storeCredit._id }).catch(() => {});
+          await CreditNote.deleteOne({ _id: creditNote._id }).catch(() => {});
+        }
+        throw txCreateErr;
+      }
 
-    // Send email notification outside transaction if email exists
-    if (emailToNotify) {
-      void sendEmail({
-        to: emailToNotify,
-        subject: `Your Credit Note & Store Credit (${creditNoteNumber}) – Mairii Jewels`,
-        html: buildCreditNoteIssuedEmail({
-          customerName,
-          creditNoteNumber,
-          couponCode,
-          amount: finalAmount,
-          issueDate: issuedDate,
-          expiryDate,
-        }),
-      }).catch((err) => {
-        logger.error({ err, creditNoteNumber }, "Failed to send manual Credit Note email");
-      });
+      return { creditNote, storeCredit };
+    } catch (scCreateErr) {
+      if (!session) {
+        await CreditNote.deleteOne({ _id: creditNote._id }).catch(() => {});
+      }
+      throw scCreateErr;
+    }
+  };
+
+  let createdResult: { creditNote: CreditNoteDoc; storeCredit: StoreCreditDoc } | null = null;
+  let useTransactions = true;
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const creditNoteNumber = await generateCreditNoteNumber();
+    const couponCode = generateSecureCouponCode();
+
+    if (!useTransactions) {
+      createdResult = await persistManualCreditDocs(undefined, creditNoteNumber, couponCode);
+      break;
     }
 
-    return { creditNote, storeCredit };
-  } catch (err) {
-    await session.abortTransaction();
-    session.endSession();
-    throw err;
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
+      createdResult = await persistManualCreditDocs(session, creditNoteNumber, couponCode);
+      await session.commitTransaction();
+      session.endSession();
+      break;
+    } catch (err: any) {
+      await session.abortTransaction().catch(() => {});
+      session.endSession();
+
+      if (isUnsupportedTxError(err)) {
+        logger.warn(
+          { err: err?.message, code: err?.code },
+          "[ManualCreditNote] Multi-document transaction unsupported for namespace/deployment; ensuring collections and retrying safely"
+        );
+        await ensureCreditCollectionsAndIndexes(true);
+        useTransactions = false;
+        if (attempt === maxAttempts) {
+          createdResult = await persistManualCreditDocs(undefined, creditNoteNumber, couponCode);
+          break;
+        }
+        continue;
+      }
+
+      if (err?.code === 11000 && attempt < maxAttempts) {
+        logger.warn(
+          { err: err?.message, attempt },
+          "[ManualCreditNote] Duplicate key encountered; refreshing credit indexes and retrying..."
+        );
+        await ensureCreditCollectionsAndIndexes(true);
+        continue;
+      }
+
+      if (isTransientCreditTxError(err) && attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 60 * attempt));
+        continue;
+      }
+
+      logger.error(
+        { err, orderId: trimmedOrderRef, orderNumber: order.orderNumber },
+        "[ManualCreditNote] Failed to issue manual credit note"
+      );
+      throw err;
+    }
   }
+
+  if (!createdResult) {
+    throw new AppError(500, "Failed to generate manual credit note");
+  }
+
+  const { creditNote, storeCredit } = createdResult;
+
+  // Send email notification outside transaction if email exists
+  if (emailToNotify) {
+    try {
+      const html = buildCreditNoteIssuedEmail({
+        customerName,
+        creditNoteNumber: creditNote.creditNoteNumber,
+        couponCode: creditNote.couponCode,
+        amount: finalAmount,
+        issueDate: issuedDate,
+        expiryDate,
+      });
+      void sendEmail({
+        to: emailToNotify,
+        subject: `Your Credit Note & Store Credit (${creditNote.creditNoteNumber}) – Mairii Jewels`,
+        html,
+      }).catch((err) => {
+        logger.error(
+          { err, creditNoteNumber: creditNote.creditNoteNumber },
+          "Failed to send manual Credit Note email"
+        );
+      });
+    } catch (emailBuildErr) {
+      logger.error({ err: emailBuildErr }, "Failed building manual Credit Note email");
+    }
+  }
+
+  return { creditNote, storeCredit };
 }
 
 /**
@@ -1035,7 +1248,10 @@ export async function cancelCreditNote(args: {
     creditNote.settlementStatus = "CANCELLED";
     creditNote.cancellationReason = reason.trim();
     creditNote.cancelledAt = new Date();
-    creditNote.cancelledBy = new mongoose.Types.ObjectId(adminId);
+    creditNote.cancelledBy =
+      adminId && mongoose.isValidObjectId(adminId)
+        ? new mongoose.Types.ObjectId(adminId)
+        : undefined;
     creditNote.remainingBalance = 0;
     await creditNote.save({ session });
 
@@ -1056,7 +1272,10 @@ export async function cancelCreditNote(args: {
           transactionDate: new Date(),
           description: `Cancelled by Admin: ${reason.trim()}`,
           performedBy: {
-            id: new mongoose.Types.ObjectId(adminId),
+            id:
+              adminId && mongoose.isValidObjectId(adminId)
+                ? new mongoose.Types.ObjectId(adminId)
+                : undefined,
             role: "ADMIN",
             name: "Admin",
           },
@@ -1174,7 +1393,10 @@ export async function reactivateCreditNote(args: {
           transactionDate: new Date(),
           description: `Cancellation Reverted / Reactivated by Admin: ${reason.trim()}`,
           performedBy: {
-            id: new mongoose.Types.ObjectId(adminId),
+            id:
+              adminId && mongoose.isValidObjectId(adminId)
+                ? new mongoose.Types.ObjectId(adminId)
+                : undefined,
             role: "ADMIN",
             name: "Admin",
           },

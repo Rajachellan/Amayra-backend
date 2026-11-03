@@ -28,7 +28,7 @@ const creditNoteSchema = new Schema(
     creditNoteNumber: { type: String, required: true, unique: true, index: true, uppercase: true },
     customerId: { type: Schema.Types.ObjectId, ref: "Customer", required: true, index: true },
     customerName: { type: String, required: true },
-    customerEmail: { type: String, required: true, lowercase: true, trim: true },
+    customerEmail: { type: String, required: false, default: "", lowercase: true, trim: true },
     originalOrderId: { type: Schema.Types.ObjectId, ref: "Order", required: true, index: true },
     originalOrderNumber: { type: String, required: true },
     returnRequestId: {
