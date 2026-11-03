@@ -129,8 +129,13 @@ export async function resendCreditNoteEmailHandler(
     const creditNote = await CreditNote.findById(id);
     if (!creditNote) throw new AppError(404, "Credit Note not found");
 
+    const recipientEmail = creditNote.customerEmail?.trim();
+    if (!recipientEmail) {
+      throw new AppError(400, "No customer email address on file for this Credit Note");
+    }
+
     await sendEmail({
-      to: creditNote.customerEmail,
+      to: recipientEmail,
       subject: `[Re-sent] Your Credit Note & Store Credit (${creditNote.creditNoteNumber}) – Mairii Jewels`,
       html: buildCreditNoteIssuedEmail({
         customerName: creditNote.customerName,
