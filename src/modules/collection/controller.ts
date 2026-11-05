@@ -14,7 +14,13 @@ export async function createCollection(
     if (!name) throw new AppError(400, "name is required");
     const slug = body.slug ? String(body.slug) : toSlug(name);
     if (await Collection.findOne({ slug })) throw new AppError(409, "slug exists");
-    const doc = await Collection.create({ ...body, name, slug });
+    const isNewCollection = Boolean(body.isNewCollection || body.isNew);
+    const doc = await Collection.create({
+      ...body,
+      name,
+      slug,
+      isNewCollection,
+    });
     res.status(201).json(doc);
   } catch (e) {
     next(e);
@@ -29,7 +35,9 @@ export async function listCollections(
   try {
     const { featured } = req.query;
     const filter: Record<string, unknown> = { active: true };
-    if (featured === "true") filter.featured = true;
+    if (featured === "true") {
+      filter.$or = [{ featured: true }, { isNewCollection: true }];
+    }
     const list = await Collection.find(filter).sort({ order: 1, name: 1 });
     res.json(list);
   } catch (e) {
@@ -70,7 +78,15 @@ export async function updateCollection(
   next: NextFunction
 ): Promise<void> {
   try {
-    const doc = await Collection.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const body = { ...(req.body as Record<string, unknown>) };
+    if ("isNewCollection" in body || "isNew" in body) {
+      body.isNewCollection = Boolean(body.isNewCollection || body.isNew);
+    }
+    const doc = await Collection.findByIdAndUpdate(
+      req.params.id,
+      { $set: body },
+      { new: true, runValidators: false }
+    );
     if (!doc) throw new AppError(404, "Not found");
     res.json(doc);
   } catch (e) {

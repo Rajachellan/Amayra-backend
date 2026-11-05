@@ -11,7 +11,7 @@ const collectionSchema = new Schema(
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
   },
-  { timestamps: true }
+  { timestamps: true, strict: false }
 );
 
 export type CollectionDoc = InferSchemaType<typeof collectionSchema> & {
