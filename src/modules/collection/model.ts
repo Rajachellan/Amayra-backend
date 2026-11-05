@@ -7,6 +7,7 @@ const collectionSchema = new Schema(
     description: { type: String },
     image: { type: String },
     featured: { type: Boolean, default: false },
+    isNewCollection: { type: Boolean, default: false },
     order: { type: Number, default: 0 },
     active: { type: Boolean, default: true },
   },
